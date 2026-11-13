@@ -80,7 +80,7 @@ class _AuthScreenState extends State<AuthScreen> {
           } else {
             setState(() {
               _successMessage =
-                  'Check your USJ-R email for a confirmation link to finish creating your account.';
+                  'Check your email for a confirmation link to finish creating your account.';
             });
           }
         }
@@ -112,14 +112,25 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-    if (email.isEmpty) return 'Enter your USJ-R email address.';
-    if (!isUsjrEmail(email)) return 'Use an @usjr.edu.ph email address.';
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      return 'Enter a valid email address.';
-    }
-    return null;
+  final email = value?.trim() ?? '';
+
+  if (email.isEmpty) {
+    return 'Enter your email address.';
   }
+
+  // Check if the email format is valid.
+  if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+    return 'Enter a valid email address.';
+  }
+
+  // Regular accounts must use a USJ-R email.
+  if (_accountType == AccountType.regular && !isUsjrEmail(email)) {
+    return 'Regular accounts must use an @usjr.edu.ph email.';
+  }
+
+  // Food stall accounts can use any valid email.
+  return null;
+}
 
   @override
   Widget build(BuildContext context) {
@@ -171,8 +182,8 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 8),
         Text(
           _isCreatingAccount
-              ? 'Choose your account type and sign up with your USJ-R email.'
-              : 'Sign in with your USJ-R email to continue.',
+              ? 'Choose your account type and enter your email address.'
+              : 'Sign in using your registered email address.',
           style: TextStyle(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 24),
@@ -198,8 +209,8 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 8),
           Text(
             _accountType == AccountType.regular
-                ? 'For students and professors'
-                : 'For food stall accounts',
+                ? 'For students and professors (USJ-R email required)'
+                : 'For food stall accounts (any valid email)',
             textAlign: TextAlign.center,
             style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
           ),
@@ -216,11 +227,13 @@ class _AuthScreenState extends State<AuthScreen> {
                 textInputAction: TextInputAction.next,
                 autofillHints: const [AutofillHints.email],
                 autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'USJ-R email',
-                  hintText: 'name@usjr.edu.ph',
-                  prefixIcon: Icon(Icons.email_outlined),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: 'Email address',
+                  hintText: _accountType == AccountType.regular
+                      ? 'name@usjr.edu.ph'
+                      : 'example@gmail.com',
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  border: const OutlineInputBorder(),
                 ),
                 validator: _validateEmail,
               ),
