@@ -118,17 +118,20 @@ class _AuthScreenState extends State<AuthScreen> {
     return 'Enter your email address.';
   }
 
-  // Check if the email format is valid.
+  // Validate the basic email format.
   if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
     return 'Enter a valid email address.';
   }
 
-  // Regular accounts must use a USJ-R email.
-  if (_accountType == AccountType.regular && !isUsjrEmail(email)) {
+  // Apply the USJ-R restriction ONLY during Regular registration.
+  if (_isCreatingAccount &&
+      _accountType == AccountType.regular &&
+      !isUsjrEmail(email)) {
     return 'Regular accounts must use an @usjr.edu.ph email.';
   }
 
-  // Food stall accounts can use any valid email.
+  // Food stall registration accepts any valid email.
+  // Login accepts either account type.
   return null;
 }
 
