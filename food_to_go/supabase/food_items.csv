@@ -1,0 +1,8 @@
+id,stall_id,name,description,image_url,solo_price,meal_price,is_available,order_count
+waffle_1,waffle_time,Classic Belgian Waffle,A golden Belgian waffle with a soft center.,https://images.unsplash.com/photo-1562376552-0d160a2f238d?w=800,65,95,true,0
+waffle_2,waffle_time,Chocolate Waffle,A waffle topped with rich chocolate sauce.,https://images.unsplash.com/photo-1528207776546-365bb710ee93?w=800,75,105,true,0
+waffle_3,waffle_time,Strawberry Waffle,A sweet waffle with strawberry toppings.,https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=800,80,110,true,0
+burger_1,burpngo,Classic Burger,A beef patty with fresh lettuce and sauce.,https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800,75,115,true,0
+burger_2,burpngo,Cheese Burger,A classic burger topped with melted cheese.,https://images.unsplash.com/photo-1553979459-d2229ba7433a?w=800,85,125,true,0
+coffee_1,coffee_shop,Iced Coffee,Chilled coffee served over ice.,https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=800,65,95,true,0
+coffee_2,coffee_shop,Caramel Latte,A creamy latte with caramel flavor.,https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=800,85,115,true,0

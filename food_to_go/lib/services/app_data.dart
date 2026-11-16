@@ -1,123 +1,48 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/cart_item.dart';
 import '../models/food_item.dart';
 import '../models/food_stall.dart';
 import 'cart_service.dart';
 
 class AppData extends ChangeNotifier {
-  AppData() {
+  static const _foodImagesBucket = 'food-images';
+
+  AppData({SupabaseClient? client}) : this._(client, []);
+
+  AppData.withStalls(List<FoodStall> initialStalls)
+    : this._(null, initialStalls);
+
+  AppData._(this._client, this._stalls) {
     cart.addListener(notifyListeners);
   }
 
+  final SupabaseClient? _client;
   final CartService cart = CartService();
-
-  final List<FoodStall> stalls = [
-    FoodStall(
-      id: 'waffle_time',
-      name: 'Waffle Time',
-      description: 'Freshly made waffles and sweet treats.',
-      imageUrl:
-          'https://images.unsplash.com/photo-1562376552-0d160a2f238d?w=800',
-      menu: [
-        FoodItem(
-          id: 'waffle_1',
-          name: 'Classic Belgian Waffle',
-          description: 'A golden Belgian waffle with a soft center.',
-          imageUrl:
-              'https://images.unsplash.com/photo-1562376552-0d160a2f238d?w=800',
-          soloPrice: 65,
-          mealPrice: 95,
-        ),
-        FoodItem(
-          id: 'waffle_2',
-          name: 'Chocolate Waffle',
-          description: 'A waffle topped with rich chocolate sauce.',
-          imageUrl:
-              'https://images.unsplash.com/photo-1528207776546-365bb710ee93?w=800',
-          soloPrice: 75,
-          mealPrice: 105,
-        ),
-        FoodItem(
-          id: 'waffle_3',
-          name: 'Strawberry Waffle',
-          description: 'A sweet waffle with strawberry toppings.',
-          imageUrl:
-              'https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=800',
-          soloPrice: 80,
-          mealPrice: 110,
-        ),
-      ],
-    ),
-    FoodStall(
-      id: 'burpngo',
-      name: "Burp'nGo",
-      description: 'Quick bites and satisfying meals.',
-      imageUrl:
-          'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800',
-      menu: [
-        FoodItem(
-          id: 'burger_1',
-          name: 'Classic Burger',
-          description: 'A beef patty with fresh lettuce and sauce.',
-          imageUrl:
-              'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800',
-          soloPrice: 75,
-          mealPrice: 115,
-        ),
-        FoodItem(
-          id: 'burger_2',
-          name: 'Cheese Burger',
-          description: 'A classic burger topped with melted cheese.',
-          imageUrl:
-              'https://images.unsplash.com/photo-1553979459-d2229ba7433a?w=800',
-          soloPrice: 85,
-          mealPrice: 125,
-        ),
-      ],
-    ),
-    FoodStall(
-      id: 'coffee_shop',
-      name: 'Coffee Shop',
-      description: 'Coffee, refreshments, and light snacks.',
-      imageUrl:
-          'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800',
-      menu: [
-        FoodItem(
-          id: 'coffee_1',
-          name: 'Iced Coffee',
-          description: 'Chilled coffee served over ice.',
-          imageUrl:
-              'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=800',
-          soloPrice: 65,
-          mealPrice: 95,
-        ),
-        FoodItem(
-          id: 'coffee_2',
-          name: 'Caramel Latte',
-          description: 'A creamy latte with caramel flavor.',
-          imageUrl:
-              'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=800',
-          soloPrice: 85,
-          mealPrice: 115,
-        ),
-      ],
-    ),
-  ];
-
+  final List<FoodStall> _stalls;
   final Set<String> _favoriteIds = {};
-  final Map<String, int> _stallLikes = {};
+  final Set<String> _likedStalls = {};
 
-  List<FoodStall> get availableStalls => List.unmodifiable(stalls);
+  String? _userId;
+  String? _loadError;
+  bool _isLoading = false;
+  bool _hasLoaded = false;
+
+  List<FoodStall> get stalls => List.unmodifiable(_stalls);
+  List<FoodStall> get availableStalls => stalls;
+  bool get isLoading => _isLoading;
+  String? get loadError => _loadError;
 
   FoodStall? getStall(String id) {
-    for (final stall in stalls) {
+    for (final stall in _stalls) {
       if (stall.id == id) return stall;
     }
     return null;
   }
 
   FoodItem? getFood(String foodId) {
-    for (final stall in stalls) {
+    for (final stall in _stalls) {
       for (final food in stall.menu) {
         if (food.id == foodId) return food;
       }
@@ -127,66 +52,300 @@ class AppData extends ChangeNotifier {
 
   bool isFavorite(String foodId) => _favoriteIds.contains(foodId);
 
-  List<FoodItem> get favorites {
-    return _favoriteIds
-        .map(getFood)
-        .whereType<FoodItem>()
-        .toList();
+  List<FoodItem> get favorites =>
+      _favoriteIds.map(getFood).whereType<FoodItem>().toList(growable: false);
+
+  bool hasLiked(String stallId) => _likedStalls.contains(stallId);
+
+  int likesFor(String stallId) => getStall(stallId)?.likeCount ?? 0;
+
+  Future<void> setUser(String? userId) async {
+    if (_client == null) return;
+    if (_userId == userId && (userId == null || _hasLoaded)) return;
+
+    _userId = userId;
+    _favoriteIds.clear();
+    _likedStalls.clear();
+    _loadError = null;
+
+    if (userId == null) {
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final stallRows = await _client
+          .from('food_stalls')
+          .select()
+          .order('name');
+      final foodRows = await _client.from('food_items').select().order('name');
+      final favoriteRows = await _client
+          .from('favorites')
+          .select('food_item_id')
+          .eq('user_id', userId);
+      final likeRows = await _client
+          .from('stall_likes')
+          .select('stall_id')
+          .eq('user_id', userId);
+
+      if (_userId != userId) return;
+
+      final menuByStall = <String, List<FoodItem>>{};
+      for (final row in foodRows) {
+        final item = FoodItem.fromMap(row);
+        menuByStall.putIfAbsent(row['stall_id'] as String, () => []).add(item);
+      }
+
+      _stalls
+        ..clear()
+        ..addAll(
+          stallRows.map(
+            (row) => FoodStall.fromMap(row, menu: menuByStall[row['id']] ?? []),
+          ),
+        );
+      _favoriteIds.addAll(
+        favoriteRows.map((row) => row['food_item_id'] as String),
+      );
+      _likedStalls.addAll(likeRows.map((row) => row['stall_id'] as String));
+      _hasLoaded = true;
+    } catch (error) {
+      if (_userId == userId) _loadError = error.toString();
+    } finally {
+      if (_userId == userId) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
   }
 
-  void toggleFavorite(String foodId) {
+  Future<void> retryLoad() async {
+    final userId = _userId;
+    if (userId != null) {
+      _hasLoaded = false;
+      await setUser(userId);
+    }
+  }
+
+  Future<void> toggleFavorite(String foodId) async {
+    final client = _requireClient();
+    final userId = _requireUser();
+
     if (_favoriteIds.contains(foodId)) {
+      await client
+          .from('favorites')
+          .delete()
+          .eq('user_id', userId)
+          .eq('food_item_id', foodId);
       _favoriteIds.remove(foodId);
     } else {
+      await client.from('favorites').insert({
+        'user_id': userId,
+        'food_item_id': foodId,
+      });
       _favoriteIds.add(foodId);
     }
     notifyListeners();
   }
 
-  int likesFor(String stallId) => _stallLikes[stallId] ?? 0;
+  Future<void> likeStall(String stallId) async {
+    final client = _requireClient();
+    final userId = _requireUser();
+    final stall = getStall(stallId);
+    if (stall == null) throw StateError('Food stall "$stallId" was not found.');
+    if (_likedStalls.contains(stallId)) return;
 
-  void likeStall(String stallId) {
-    _stallLikes[stallId] = likesFor(stallId) + 1;
+    await client.from('stall_likes').insert({
+      'user_id': userId,
+      'stall_id': stallId,
+    });
+
+    _likedStalls.add(stallId);
+    stall.likeCount++;
     notifyListeners();
   }
 
-  void addFood(String stallId, FoodItem food) {
+  Future<void> addFood(String stallId, FoodItem food) async {
+    final client = _requireClient();
     final stall = getStall(stallId);
-    if (stall == null) return;
+    if (stall == null) throw StateError('Food stall "$stallId" was not found.');
 
-    stall.menu.add(food);
+    final row = await client
+        .from('food_items')
+        .insert(food.toInsertMap(stallId))
+        .select()
+        .single();
+    stall.menu.add(FoodItem.fromMap(row));
     notifyListeners();
   }
 
-  void updateFood(String stallId, FoodItem updatedFood) {
+  Future<String> uploadFoodImage({
+    required String stallId,
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    final client = _requireClient();
+    _requireUser();
+
+    if (getStall(stallId) == null) {
+      throw StateError('Food stall "$stallId" was not found.');
+    }
+
+    final extension = fileName.split('.').last.toLowerCase();
+    const contentTypes = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'webp': 'image/webp',
+      'gif': 'image/gif',
+    };
+    final contentType = contentTypes[extension];
+    if (contentType == null) {
+      throw const FormatException('Choose a JPG, PNG, WebP, or GIF image.');
+    }
+    if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) {
+      throw const FormatException(
+        'Image files must be between 1 byte and 5 MB.',
+      );
+    }
+
+    final path = '$stallId/${DateTime.now().microsecondsSinceEpoch}.$extension';
+    await client.storage
+        .from(_foodImagesBucket)
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: contentType),
+        );
+    return client.storage.from(_foodImagesBucket).getPublicUrl(path);
+  }
+
+  Future<void> updateFood(String stallId, FoodItem updatedFood) async {
+    final client = _requireClient();
     final stall = getStall(stallId);
-    if (stall == null) return;
+    if (stall == null) throw StateError('Food stall "$stallId" was not found.');
 
-    final index = stall.menu.indexWhere(
-      (item) => item.id == updatedFood.id,
-    );
+    final row = await client
+        .from('food_items')
+        .update(updatedFood.toUpdateMap())
+        .eq('id', updatedFood.id)
+        .eq('stall_id', stallId)
+        .select()
+        .maybeSingle();
+    if (row == null) {
+      throw StateError('The menu item could not be updated.');
+    }
 
-    if (index == -1) return;
-
-    stall.menu[index] = updatedFood;
+    final index = stall.menu.indexWhere((item) => item.id == updatedFood.id);
+    if (index == -1) {
+      throw StateError('Menu item "${updatedFood.id}" was not found.');
+    }
+    stall.menu[index] = FoodItem.fromMap(row);
     notifyListeners();
   }
 
-  void deleteFood(String stallId, String foodId) {
+  Future<void> deleteFood(String stallId, String foodId) async {
+    final client = _requireClient();
     final stall = getStall(stallId);
-    if (stall == null) return;
+    if (stall == null) throw StateError('Food stall "$stallId" was not found.');
 
+    await client
+        .from('food_items')
+        .delete()
+        .eq('id', foodId)
+        .eq('stall_id', stallId);
     stall.menu.removeWhere((item) => item.id == foodId);
     _favoriteIds.remove(foodId);
     notifyListeners();
   }
 
-  void toggleAvailability(String stallId, String foodId) {
+  Future<void> toggleAvailability(String stallId, String foodId) async {
+    final client = _requireClient();
+    final stall = getStall(stallId);
     final food = getFood(foodId);
-    if (food == null) return;
+    if (stall == null || food == null) {
+      throw StateError('The menu item could not be found.');
+    }
 
-    food.isAvailable = !food.isAvailable;
+    final row = await client
+        .from('food_items')
+        .update({'is_available': !food.isAvailable})
+        .eq('id', foodId)
+        .eq('stall_id', stallId)
+        .select()
+        .maybeSingle();
+    if (row == null) {
+      throw StateError('The menu item availability could not be updated.');
+    }
+
+    final index = stall.menu.indexWhere((item) => item.id == foodId);
+    stall.menu[index] = FoodItem.fromMap(row);
     notifyListeners();
+  }
+
+  Future<PlacedOrder> placeOrder({
+    required List<CartItem> items,
+    required String paymentMethod,
+  }) async {
+    final client = _requireClient();
+    _requireUser();
+
+    final response = await client.rpc(
+      'place_food_order',
+      params: {
+        'p_items': items
+            .map(
+              (item) => {
+                'food_id': item.food.id,
+                'purchase_type': item.purchaseType.name,
+                'quantity': item.quantity,
+              },
+            )
+            .toList(),
+        'p_payment_method': paymentMethod,
+      },
+    );
+
+    if (response is! Map) {
+      throw const FormatException('Supabase returned an invalid order result.');
+    }
+    final total = response['total'];
+    final itemCount = response['item_count'];
+    final orderId = response['order_id'];
+    if (total is! num || itemCount is! num || orderId is! String) {
+      throw const FormatException('Supabase returned an incomplete order.');
+    }
+
+    for (final item in items) {
+      final food = getFood(item.food.id);
+      if (food != null) food.orderCount += item.quantity;
+    }
+    notifyListeners();
+
+    return PlacedOrder(
+      id: orderId,
+      total: total.toDouble(),
+      itemCount: itemCount.toInt(),
+    );
+  }
+
+  SupabaseClient _requireClient() {
+    final client = _client;
+    if (client == null) {
+      throw StateError('Supabase is not configured for this application.');
+    }
+    return client;
+  }
+
+  String _requireUser() {
+    final userId = _userId;
+    if (userId == null) {
+      throw StateError('Sign in before saving account data.');
+    }
+    return userId;
   }
 
   @override
@@ -195,4 +354,16 @@ class AppData extends ChangeNotifier {
     cart.dispose();
     super.dispose();
   }
+}
+
+class PlacedOrder {
+  const PlacedOrder({
+    required this.id,
+    required this.total,
+    required this.itemCount,
+  });
+
+  final String id;
+  final double total;
+  final int itemCount;
 }

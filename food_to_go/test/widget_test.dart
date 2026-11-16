@@ -1,14 +1,14 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:food_to_go/account_type.dart';
 import 'package:food_to_go/auth_screen.dart';
 import 'package:food_to_go/main.dart';
 import 'package:food_to_go/home_screen.dart';
+import 'package:food_to_go/models/food_stall.dart';
 import 'package:food_to_go/services/app_data.dart';
 
 void main() {
-  test('only USJ-R email addresses are allowed', () {
+  test('USJ-R email detection is case-insensitive and exact', () {
     expect(isUsjrEmail('student@usjr.edu.ph'), isTrue);
     expect(isUsjrEmail('STUDENT@USJR.EDU.PH'), isTrue);
     expect(isUsjrEmail('student@gmail.com'), isFalse);
@@ -16,12 +16,13 @@ void main() {
   });
 
   testWidgets('shows login and account creation options', (tester) async {
-    await tester.pumpWidget(
-      const FoodToGoApp(supabaseConfigured: false),
-    );
+    await tester.pumpWidget(const FoodToGoApp(supabaseConfigured: false));
 
     expect(find.text('Welcome back'), findsOneWidget);
-    expect(find.text('USJ-R email'), findsOneWidget);
+    expect(
+      find.text('Sign in using your registered email address.'),
+      findsOneWidget,
+    );
     expect(find.text('Food stall'), findsNothing);
     expect(find.text('Log in'), findsOneWidget);
     expect(find.text('New here? Create an account'), findsOneWidget);
@@ -33,17 +34,24 @@ void main() {
     expect(find.text('Confirm password'), findsOneWidget);
     expect(find.text('Regular'), findsOneWidget);
     expect(find.text('Food stall'), findsOneWidget);
-    expect(find.text('For students and professors'), findsOneWidget);
+    expect(
+      find.text('For students and professors (USJ-R email required)'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Food stall'));
     await tester.pumpAndSettle();
 
-    expect(find.text('For food stall accounts'), findsOneWidget);
+    expect(
+      find.text('For food stall accounts (any valid email)'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('customer home screen displays the signed-in account',
-      (tester) async {
-    final appData = AppData();
+  testWidgets('customer home screen displays the signed-in account', (
+    tester,
+  ) async {
+    final appData = AppData.withStalls([]);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -66,9 +74,16 @@ void main() {
     appData.dispose();
   });
 
-  testWidgets('food stall account gets its assigned dashboard',
-      (tester) async {
-    final appData = AppData();
+  testWidgets('food stall account gets its assigned dashboard', (tester) async {
+    final appData = AppData.withStalls([
+      FoodStall(
+        id: 'waffle_time',
+        name: 'Waffle Time',
+        description: '',
+        imageUrl: '',
+        menu: [],
+      ),
+    ]);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -84,12 +99,24 @@ void main() {
     expect(find.text('Food Stall Dashboard'), findsOneWidget);
     expect(find.text('Waffle Time'), findsOneWidget);
     expect(find.text('Manage Menu'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('You can only manage the storefront assigned to your account.'),
+      100,
+    );
     expect(
-      find.text(
-        'You can only manage the storefront assigned to your account.',
-      ),
+      find.text('You can only manage the storefront assigned to your account.'),
       findsOneWidget,
     );
+
+    await tester.scrollUntilVisible(find.text('Manage Menu'), 100);
+    await tester.tap(find.text('Manage Menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add Item'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose and upload image'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
 

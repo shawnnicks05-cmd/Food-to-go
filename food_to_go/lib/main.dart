@@ -18,9 +18,7 @@ Future<void> main() async {
   );
 
   final configured =
-      supabaseUrl.isNotEmpty &&
-      supabasePublishableKey.isNotEmpty &&
-      supabasePublishableKey != 'YOUR_SUPABASE_PUBLISHABLE_KEY';
+      supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
 
   if (configured) {
     await Supabase.initialize(
@@ -29,16 +27,11 @@ Future<void> main() async {
     );
   }
 
-  runApp(
-    FoodToGoApp(supabaseConfigured: configured),
-  );
+  runApp(FoodToGoApp(supabaseConfigured: configured));
 }
 
 class FoodToGoApp extends StatefulWidget {
-  const FoodToGoApp({
-    super.key,
-    required this.supabaseConfigured,
-  });
+  const FoodToGoApp({super.key, required this.supabaseConfigured});
 
   final bool supabaseConfigured;
 
@@ -47,7 +40,9 @@ class FoodToGoApp extends StatefulWidget {
 }
 
 class _FoodToGoAppState extends State<FoodToGoApp> {
-  late final AppData appData = AppData();
+  late final AppData appData = AppData(
+    client: widget.supabaseConfigured ? Supabase.instance.client : null,
+  );
 
   @override
   void dispose() {
@@ -62,20 +57,18 @@ class _FoodToGoAppState extends State<FoodToGoApp> {
     const warmWhite = Color(0xFFFFFCF7);
     const ink = Color(0xFF302F27);
 
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: sage,
-      surface: cream,
-    ).copyWith(
-      primary: sage,
-      onPrimary: Colors.white,
-      primaryContainer: const Color(0xFFE3E8D9),
-      onPrimaryContainer: const Color(0xFF303927),
-      secondary: const Color(0xFFE8DFD3),
-      onSecondary: ink,
-      surface: cream,
-      onSurface: ink,
-      outline: const Color(0xFF888477),
-    );
+    final colorScheme = ColorScheme.fromSeed(seedColor: sage, surface: cream)
+        .copyWith(
+          primary: sage,
+          onPrimary: Colors.white,
+          primaryContainer: const Color(0xFFE3E8D9),
+          onPrimaryContainer: const Color(0xFF303927),
+          secondary: const Color(0xFFE8DFD3),
+          onSecondary: ink,
+          surface: cream,
+          onSurface: ink,
+          outline: const Color(0xFF888477),
+        );
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -91,9 +84,7 @@ class _FoodToGoAppState extends State<FoodToGoApp> {
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: warmWhite,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(

@@ -29,9 +29,9 @@ class HomeScreen extends StatelessWidget {
       await Supabase.instance.client.auth.signOut();
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to log out: $error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Unable to log out: $error')));
       }
     }
   }
@@ -39,9 +39,7 @@ class HomeScreen extends StatelessWidget {
   void _openCart(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => CartScreen(appData: appData),
-      ),
+      MaterialPageRoute(builder: (_) => CartScreen(appData: appData)),
     );
   }
 
@@ -52,6 +50,33 @@ class HomeScreen extends StatelessWidget {
       return _PendingApprovalScreen(
         email: email,
         onSignOut: () => _signOut(context),
+      );
+    }
+
+    if (appData.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (appData.loadError != null) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Unable to load your data from Supabase.'),
+                const SizedBox(height: 8),
+                Text(appData.loadError!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: appData.retryLoad,
+                  child: const Text('Try again'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -110,10 +135,7 @@ class _CustomerHome extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => StallMenuScreen(
-          stallId: stall.id,
-          appData: appData,
-        ),
+        builder: (_) => StallMenuScreen(stallId: stall.id, appData: appData),
       ),
     );
   }
@@ -166,10 +188,9 @@ class _CustomerHome extends StatelessWidget {
             children: [
               Text(
                 'Your campus food, made easy.',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -188,11 +209,7 @@ class _CustomerHome extends StatelessWidget {
                 child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.fastfood,
-                      color: Colors.white,
-                      size: 30,
-                    ),
+                    Icon(Icons.fastfood, color: Colors.white, size: 30),
                     SizedBox(height: 12),
                     Text(
                       'Find your next meal',
@@ -217,8 +234,8 @@ class _CustomerHome extends StatelessWidget {
                   Text(
                     'Available stalls',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Text('${appData.stalls.length} stalls'),
                 ],
@@ -250,6 +267,18 @@ class _StallCard extends StatelessWidget {
   final AppData appData;
   final VoidCallback onTap;
 
+  Future<void> _likeStall(BuildContext context) async {
+    try {
+      await appData.likeStall(stall.id);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to like this stall: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -260,10 +289,7 @@ class _StallCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FoodImage(
-              imageUrl: stall.imageUrl,
-              height: 155,
-            ),
+            FoodImage(imageUrl: stall.imageUrl, height: 155),
             Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
@@ -290,8 +316,14 @@ class _StallCard extends StatelessWidget {
                     children: [
                       IconButton(
                         tooltip: 'Like storefront',
-                        onPressed: () => appData.likeStall(stall.id),
-                        icon: const Icon(Icons.thumb_up_alt_outlined),
+                        onPressed: appData.hasLiked(stall.id)
+                            ? null
+                            : () => _likeStall(context),
+                        icon: Icon(
+                          appData.hasLiked(stall.id)
+                              ? Icons.thumb_up
+                              : Icons.thumb_up_alt_outlined,
+                        ),
                       ),
                       Text('${appData.likesFor(stall.id)}'),
                     ],
@@ -342,22 +374,19 @@ class _OwnerDashboard extends StatelessWidget {
               Text(
                 'Welcome back',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 6),
               Text(email),
               const SizedBox(height: 22),
-              FoodImage(
-                imageUrl: stall.imageUrl,
-                height: 170,
-              ),
+              FoodImage(imageUrl: stall.imageUrl, height: 170),
               const SizedBox(height: 16),
               Text(
                 stall.name,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               Text(stall.description),
               const SizedBox(height: 18),
@@ -381,10 +410,8 @@ class _OwnerDashboard extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => OwnerMenuScreen(
-                        stallId: stall.id,
-                        appData: appData,
-                      ),
+                      builder: (_) =>
+                          OwnerMenuScreen(stallId: stall.id, appData: appData),
                     ),
                   );
                 },
@@ -422,10 +449,7 @@ class _PendingApprovalScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Food to Go'),
         actions: [
-          IconButton(
-            onPressed: onSignOut,
-            icon: const Icon(Icons.logout),
-          ),
+          IconButton(onPressed: onSignOut, icon: const Icon(Icons.logout)),
         ],
       ),
       body: Center(
@@ -434,16 +458,13 @@ class _PendingApprovalScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.hourglass_top_rounded,
-                size: 65,
-              ),
+              const Icon(Icons.hourglass_top_rounded, size: 65),
               const SizedBox(height: 18),
               Text(
                 'Account Pending',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 10),
               Text(message, textAlign: TextAlign.center),

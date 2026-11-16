@@ -4,13 +4,19 @@ language plpgsql
 as $$
 declare
   user_email text := lower(coalesce(event->'user'->>'email', ''));
+  requested_type text :=
+    coalesce(event->'user'->'user_metadata'->>'requested_account_type', 'regular');
 begin
+  if requested_type = 'foodstall' then
+    return '{}'::jsonb;
+  end if;
+
   if right(user_email, length('@usjr.edu.ph')) <> '@usjr.edu.ph' then
     return jsonb_build_object(
       'error',
       jsonb_build_object(
         'http_code', 403,
-        'message', 'Only USJ-R email addresses may create an account.'
+        'message', 'Regular accounts must use a USJ-R email address.'
       )
     );
   end if;

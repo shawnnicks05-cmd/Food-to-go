@@ -16,6 +16,18 @@ class StallMenuScreen extends StatelessWidget {
   final String stallId;
   final AppData appData;
 
+  Future<void> _likeStall(BuildContext context, FoodStall stall) async {
+    try {
+      await appData.likeStall(stall.id);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to like this stall: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final FoodStall? stall = appData.getStall(stallId);
@@ -56,22 +68,20 @@ class StallMenuScreen extends StatelessWidget {
       body: AnimatedBuilder(
         animation: appData,
         builder: (context, _) {
-          final availableItems =
-              stall.menu.where((food) => food.isAvailable).toList();
+          final availableItems = stall.menu
+              .where((food) => food.isAvailable)
+              .toList();
 
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              FoodImage(
-                imageUrl: stall.imageUrl,
-                height: 170,
-              ),
+              FoodImage(imageUrl: stall.imageUrl, height: 170),
               const SizedBox(height: 16),
               Text(
                 stall.name,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 5),
               Text(stall.description),
@@ -83,18 +93,24 @@ class StallMenuScreen extends StatelessWidget {
                   Text('${appData.likesFor(stall.id)} likes'),
                   const Spacer(),
                   TextButton.icon(
-                    onPressed: () => appData.likeStall(stall.id),
-                    icon: const Icon(Icons.thumb_up_alt_outlined),
-                    label: const Text('Like'),
+                    onPressed: appData.hasLiked(stall.id)
+                        ? null
+                        : () => _likeStall(context, stall),
+                    icon: Icon(
+                      appData.hasLiked(stall.id)
+                          ? Icons.thumb_up
+                          : Icons.thumb_up_alt_outlined,
+                    ),
+                    label: Text(appData.hasLiked(stall.id) ? 'Liked' : 'Like'),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
               Text(
                 'Available Menu',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               if (availableItems.isEmpty)

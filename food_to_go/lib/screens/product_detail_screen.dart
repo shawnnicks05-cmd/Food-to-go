@@ -20,8 +20,7 @@ class ProductDetailScreen extends StatefulWidget {
   final AppData appData;
 
   @override
-  State<ProductDetailScreen> createState() =>
-      _ProductDetailScreenState();
+  State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
@@ -35,11 +34,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   void _addToCart() {
     if (!widget.food.isAvailable) return;
 
-    widget.appData.cart.addItem(
-      widget.food,
-      _selectedType,
-      _quantity,
-    );
+    widget.appData.cart.addItem(widget.food, _selectedType, _quantity);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -61,6 +56,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     Navigator.pop(context);
   }
 
+  Future<void> _toggleFavorite() async {
+    try {
+      await widget.appData.toggleFavorite(widget.food.id);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to update favorite: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final food = widget.food;
@@ -76,7 +83,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
               return IconButton(
                 tooltip: favorite ? 'Remove favorite' : 'Add favorite',
-                onPressed: () => widget.appData.toggleFavorite(food.id),
+                onPressed: _toggleFavorite,
                 icon: Icon(
                   favorite ? Icons.favorite : Icons.favorite_border,
                   color: favorite ? Colors.red : null,
@@ -89,16 +96,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          FoodImage(
-            imageUrl: food.imageUrl,
-            height: 230,
-          ),
+          FoodImage(imageUrl: food.imageUrl, height: 230),
           const SizedBox(height: 18),
           Text(
             food.name,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(food.description),
@@ -113,9 +117,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             description: 'Food item only',
             price: food.soloPrice,
             selected: _selectedType == PurchaseType.solo,
-            onTap: () => setState(
-              () => _selectedType = PurchaseType.solo,
-            ),
+            onTap: () => setState(() => _selectedType = PurchaseType.solo),
           ),
           const SizedBox(height: 10),
           _PurchaseOption(
@@ -123,9 +125,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             description: 'Food item with meal add-ons',
             price: food.mealPrice,
             selected: _selectedType == PurchaseType.meal,
-            onTap: () => setState(
-              () => _selectedType = PurchaseType.meal,
-            ),
+            onTap: () => setState(() => _selectedType = PurchaseType.meal),
           ),
           const SizedBox(height: 24),
           const Text(
@@ -195,12 +195,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           child: FilledButton.icon(
             onPressed: food.isAvailable ? _addToCart : null,
             icon: const Icon(Icons.shopping_cart_outlined),
-            label: Text(
-              food.isAvailable ? 'Add to Cart' : 'Unavailable',
-            ),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.all(16),
-            ),
+            label: Text(food.isAvailable ? 'Add to Cart' : 'Unavailable'),
+            style: FilledButton.styleFrom(padding: const EdgeInsets.all(16)),
           ),
         ),
       ),
@@ -226,9 +222,7 @@ class _PurchaseOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: selected
-          ? Theme.of(context).colorScheme.primaryContainer
-          : null,
+      color: selected ? Theme.of(context).colorScheme.primaryContainer : null,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
@@ -237,9 +231,7 @@ class _PurchaseOption extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                selected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
+                selected ? Icons.radio_button_checked : Icons.radio_button_off,
                 color: Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 12),

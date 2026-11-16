@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../models/food_item.dart';
@@ -10,10 +9,7 @@ import 'product_detail_screen.dart';
 class FavoritesScreen extends StatelessWidget {
   final AppData appData;
 
-  const FavoritesScreen({
-    super.key,
-    required this.appData,
-  });
+  const FavoritesScreen({super.key, required this.appData});
 
   FoodStall? _findStall(FoodItem food) {
     for (final stall in appData.stalls) {
@@ -33,19 +29,13 @@ class FavoritesScreen extends StatelessWidget {
         final favorites = appData.favorites;
 
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('My Favorites'),
-          ),
+          appBar: AppBar(title: const Text('My Favorites')),
           body: favorites.isEmpty
               ? const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.favorite_border,
-                        size: 64,
-                        color: Colors.grey,
-                      ),
+                      Icon(Icons.favorite_border, size: 64, color: Colors.grey),
                       SizedBox(height: 12),
                       Text(
                         'No favorites yet',
@@ -55,9 +45,7 @@ class FavoritesScreen extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: 6),
-                      Text(
-                        'Your favorite food items will appear here.',
-                      ),
+                      Text('Your favorite food items will appear here.'),
                     ],
                   ),
                 )
@@ -80,9 +68,7 @@ class FavoritesScreen extends StatelessWidget {
                         ),
                         title: Text(
                           food.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
                           'From ₱${food.soloPrice.toStringAsFixed(2)}',
@@ -103,12 +89,21 @@ class FavoritesScreen extends StatelessWidget {
                               },
                         trailing: IconButton(
                           tooltip: 'Remove from favorites',
-                          icon: const Icon(
-                            Icons.favorite,
-                            color: Colors.red,
-                          ),
-                          onPressed: () {
-                            appData.toggleFavorite(food.id);
+                          icon: const Icon(Icons.favorite, color: Colors.red),
+                          onPressed: () async {
+                            try {
+                              await appData.toggleFavorite(food.id);
+                            } catch (error) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Unable to update favorite: $error',
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
                           },
                         ),
                       ),

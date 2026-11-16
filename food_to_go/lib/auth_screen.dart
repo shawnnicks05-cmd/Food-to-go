@@ -49,10 +49,13 @@ class _AuthScreenState extends State<AuthScreen> {
     if (widget.supabaseConfigured) {
       final auth = Supabase.instance.client.auth;
       _user = auth.currentUser;
+      unawaited(widget.appData.setUser(_user?.id));
 
       _authSubscription = auth.onAuthStateChange.listen((state) {
         if (!mounted) return;
-        setState(() => _user = state.session?.user);
+        final user = state.session?.user;
+        setState(() => _user = user);
+        unawaited(widget.appData.setUser(user?.id));
       });
     }
   }
@@ -70,12 +73,13 @@ class _AuthScreenState extends State<AuthScreen> {
     final email = value?.trim() ?? '';
 
     if (email.isEmpty) return 'Enter your email address.';
-
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
       return 'Enter a valid email address.';
     }
 
-    if (_selectedType == AccountType.regular && !isUsjrEmail(email)) {
+    if (_creatingAccount &&
+        _selectedType == AccountType.regular &&
+        !isUsjrEmail(email)) {
       return 'Regular accounts must use an @usjr.edu.ph email.';
     }
 
@@ -84,6 +88,14 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (!widget.supabaseConfigured) {
+      setState(() {
+        _error = 'Authentication is not configured for this application.';
+        _success = null;
+      });
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -100,10 +112,9 @@ class _AuthScreenState extends State<AuthScreen> {
           email: email,
           password: _passwordController.text,
           data: {
-            'requested_account_type':
-                _selectedType == AccountType.foodStall
-                    ? 'foodstall'
-                    : 'regular',
+            'requested_account_type': _selectedType == AccountType.foodStall
+                ? 'foodstall'
+                : 'regular',
           },
         );
 
@@ -116,15 +127,6 @@ class _AuthScreenState extends State<AuthScreen> {
             _success =
                 'Account request submitted. Check your email to confirm your account. Food Stall accounts require administrator approval.';
           });
-        if (mounted) {
-          if (response.session != null) {
-            setState(() => _user = response.session!.user);
-          } else {
-            setState(() {
-              _successMessage =
-                  'Check your email for a confirmation link to finish creating your account.';
-            });
-          }
         }
       } else {
         final response = await auth.signInWithPassword(
@@ -142,35 +144,7 @@ class _AuthScreenState extends State<AuthScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
   }
-
-  String? _validateEmail(String? value) {
-  final email = value?.trim() ?? '';
-
-  if (email.isEmpty) {
-    return 'Enter your email address.';
-  }
-
-  // Validate the basic email format.
-  if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-    return 'Enter a valid email address.';
-  }
-
-  // Apply the USJ-R restriction ONLY during Regular registration.
-  if (_isCreatingAccount &&
-      _accountType == AccountType.regular &&
-      !isUsjrEmail(email)) {
-    return 'Regular accounts must use an @usjr.edu.ph email.';
-  }
-
-  // Food stall registration accepts any valid email.
-  // Login accepts either account type.
-  return null;
-}
 
   @override
   Widget build(BuildContext context) {
@@ -190,69 +164,14 @@ class _AuthScreenState extends State<AuthScreen> {
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 430),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Icon(
-                      Icons.restaurant_menu,
-                      size: 58,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      _creatingAccount ? 'Create your account' : 'Welcome back',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _creatingAccount
-                          ? 'Sign up to use Food to Go.'
-                          : 'Log in using your registered email address.',
-                    ),
-                    const SizedBox(height: 24),
+              child: _buildAuthForm(Theme.of(context).colorScheme),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-                    if (_creatingAccount) ...[
-                      SegmentedButton<AccountType>(
-                        segments: const [
-                          ButtonSegment(
-                            value: AccountType.regular,
-                            label: Text('Regular'),
-                          ),
-                          ButtonSegment(
-                            value: AccountType.foodStall,
-                            label: Text('Food Stall'),
-                          ),
-                        ],
-                        selected: {_selectedType},
-                        onSelectionChanged: (selection) {
-                          setState(() {
-                            _selectedType = selection.first;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _selectedType == AccountType.regular
-                            ? 'Regular accounts require a USJ-R email.'
-                            : 'Food Stall accounts accept any valid email and require administrator approval.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email address',
-                        prefixIcon: Icon(Icons.email_outlined),
-                      ),
-                      validator: _validateEmail,
   Widget _buildAuthForm(ColorScheme colors) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -269,20 +188,20 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 24),
         Text(
-          _isCreatingAccount ? 'Create your account' : 'Welcome back',
+          _creatingAccount ? 'Create your account' : 'Welcome back',
           style: Theme.of(
             context,
           ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         Text(
-          _isCreatingAccount
+          _creatingAccount
               ? 'Choose your account type and enter your email address.'
               : 'Sign in using your registered email address.',
           style: TextStyle(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 24),
-        if (_isCreatingAccount) ...[
+        if (_creatingAccount) ...[
           SegmentedButton<AccountType>(
             segments: const [
               ButtonSegment<AccountType>(
@@ -294,16 +213,16 @@ class _AuthScreenState extends State<AuthScreen> {
                 label: Text('Food stall'),
               ),
             ],
-            selected: {_accountType},
-            onSelectionChanged: _isLoading
+            selected: {_selectedType},
+            onSelectionChanged: _loading
                 ? null
                 : (selection) {
-                    setState(() => _accountType = selection.first);
+                    setState(() => _selectedType = selection.first);
                   },
           ),
           const SizedBox(height: 8),
           Text(
-            _accountType == AccountType.regular
+            _selectedType == AccountType.regular
                 ? 'For students and professors (USJ-R email required)'
                 : 'For food stall accounts (any valid email)',
             textAlign: TextAlign.center,
@@ -324,7 +243,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 autocorrect: false,
                 decoration: InputDecoration(
                   labelText: 'Email address',
-                  hintText: _accountType == AccountType.regular
+                  hintText:
+                      _creatingAccount && _selectedType == AccountType.regular
                       ? 'name@usjr.edu.ph'
                       : 'example@gmail.com',
                   prefixIcon: const Icon(Icons.email_outlined),
@@ -336,11 +256,11 @@ class _AuthScreenState extends State<AuthScreen> {
               TextFormField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
-                textInputAction: _isCreatingAccount
+                textInputAction: _creatingAccount
                     ? TextInputAction.next
                     : TextInputAction.done,
                 autofillHints: [
-                  _isCreatingAccount
+                  _creatingAccount
                       ? AutofillHints.newPassword
                       : AutofillHints.password,
                 ],
@@ -360,100 +280,76 @@ class _AuthScreenState extends State<AuthScreen> {
                           ? Icons.visibility_outlined
                           : Icons.visibility_off_outlined,
                     ),
-                    const SizedBox(height: 16),
-
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Enter your password.';
-                        }
-                        if (_creatingAccount && value.length < 8) {
-                          return 'Use at least 8 characters.';
-                        }
-                        return null;
+                  ),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Enter your password.';
+                  }
+                  if (_creatingAccount && value.length < 8) {
+                    return 'Use at least 8 characters.';
+                  }
+                  return null;
+                },
+              ),
+              if (_creatingAccount) ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmController,
+                  obscureText: _obscurePassword,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm password',
+                    prefixIcon: Icon(Icons.lock_reset_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value != _passwordController.text) {
+                      return 'Passwords do not match.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: colors.error)),
+              ],
+              if (_success != null) ...[
+                const SizedBox(height: 16),
+                Text(_success!),
+              ],
+              const SizedBox(height: 22),
+              FilledButton(
+                onPressed: _loading ? null : _submit,
+                child: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(_creatingAccount ? 'Create Account' : 'Log in'),
+              ),
+              TextButton(
+                onPressed: _loading
+                    ? null
+                    : () {
+                        setState(() {
+                          _creatingAccount = !_creatingAccount;
+                          _selectedType = AccountType.regular;
+                          _error = null;
+                          _success = null;
+                        });
                       },
-                    ),
-
-                    if (_creatingAccount) ...[
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _confirmController,
-                        obscureText: _obscurePassword,
-                        decoration: const InputDecoration(
-                          labelText: 'Confirm password',
-                          prefixIcon: Icon(Icons.lock_reset_outlined),
-                        ),
-                        validator: (value) {
-                          if (value != _passwordController.text) {
-                            return 'Passwords do not match.';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-
-                    if (_error != null) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        _error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ],
-
-                    if (_success != null) ...[
-                      const SizedBox(height: 16),
-                      Text(_success!),
-                    ],
-
-                    const SizedBox(height: 22),
-                    FilledButton(
-                      onPressed: _loading ? null : _submit,
-                      child: _loading
-                          ? const CircularProgressIndicator()
-                          : Text(_creatingAccount ? 'Create Account' : 'Log In'),
-                    ),
-                    TextButton(
-                      onPressed: _loading
-                          ? null
-                          : () {
-                              setState(() {
-                                _creatingAccount = !_creatingAccount;
-                                _selectedType = AccountType.regular;
-                                _error = null;
-                                _success = null;
-                              });
-                            },
-                      child: Text(
-                        _creatingAccount
-                            ? 'Already have an account? Log in'
-                            : 'New here? Create an account',
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  _creatingAccount
+                      ? 'Already have an account? Log in'
+                      : 'New here? Create an account',
                 ),
               ),
-            ),
+            ],
           ),
         ),
-      ),
+      ],
     );
   }
 }
