@@ -1,184 +1,466 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'account_type.dart';
 
-class HomeScreen extends StatefulWidget {
+import 'account_type.dart';
+import 'models/food_stall.dart';
+import 'services/app_data.dart';
+import 'screens/cart_screen.dart';
+import 'screens/favorites_screens.dart';
+import 'screens/owner_menu_screen.dart';
+import 'screens/stall_menu_screen.dart';
+import 'widgets/food_image.dart';
+
+class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     required this.email,
     required this.accountType,
+    required this.storefrontId,
+    required this.appData,
   });
 
   final String email;
   final AccountType accountType;
+  final String? storefrontId;
+  final AppData appData;
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  bool _isSigningOut = false;
-
-  Future<void> _signOut() async {
-    setState(() => _isSigningOut = true);
+  Future<void> _signOut(BuildContext context) async {
     try {
       await Supabase.instance.client.auth.signOut();
-    } on AuthException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
-      }
-    } on Exception catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Unable to log out: $error')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSigningOut = false);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to log out: $error')),
+        );
       }
     }
   }
 
+  void _openCart(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CartScreen(appData: appData),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final isRegular = widget.accountType == AccountType.regular;
-    final isFoodStall = widget.accountType == AccountType.foodStall;
-    final title = switch (widget.accountType) {
-      AccountType.regular => 'Your campus food, made easy.',
-      AccountType.foodStall => 'Manage your food stall.',
-      AccountType.admin => 'Administration dashboard',
-    };
+    if (accountType == AccountType.pending ||
+        (accountType == AccountType.foodStall && storefrontId == null)) {
+      return _PendingApprovalScreen(
+        email: email,
+        onSignOut: () => _signOut(context),
+      );
+    }
 
+    if (accountType == AccountType.foodStall) {
+      final stall = appData.getStall(storefrontId!);
+
+      if (stall == null) {
+        return _PendingApprovalScreen(
+          email: email,
+          message:
+              'Your account does not have a valid storefront assignment. Please contact the administrator.',
+          onSignOut: () => _signOut(context),
+        );
+      }
+
+      return _OwnerDashboard(
+        email: email,
+        stall: stall,
+        appData: appData,
+        onSignOut: () => _signOut(context),
+      );
+    }
+
+    if (accountType == AccountType.admin) {
+      return _PendingApprovalScreen(
+        email: email,
+        message:
+            'Administrator account detected. The administration dashboard has not been implemented in this prototype.',
+        onSignOut: () => _signOut(context),
+      );
+    }
+
+    return _CustomerHome(
+      email: email,
+      appData: appData,
+      onSignOut: () => _signOut(context),
+      onOpenCart: () => _openCart(context),
+    );
+  }
+}
+
+class _CustomerHome extends StatelessWidget {
+  const _CustomerHome({
+    required this.email,
+    required this.appData,
+    required this.onSignOut,
+    required this.onOpenCart,
+  });
+
+  final String email;
+  final AppData appData;
+  final VoidCallback onSignOut;
+  final VoidCallback onOpenCart;
+
+  void _openStall(BuildContext context, FoodStall stall) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StallMenuScreen(
+          stallId: stall.id,
+          appData: appData,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Food to Go'),
         leading: const Icon(Icons.restaurant_menu),
+        title: const Text('Food to Go'),
         actions: [
           IconButton(
+            tooltip: 'Favorites',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => FavoritesScreen(appData: appData),
+                ),
+              );
+            },
+            icon: const Icon(Icons.favorite_border),
+          ),
+          AnimatedBuilder(
+            animation: appData,
+            builder: (context, _) {
+              return IconButton(
+                tooltip: 'Cart',
+                onPressed: onOpenCart,
+                icon: Badge(
+                  isLabelVisible: appData.cart.totalItems > 0,
+                  label: Text('${appData.cart.totalItems}'),
+                  child: const Icon(Icons.shopping_cart_outlined),
+                ),
+              );
+            },
+          ),
+          IconButton(
             tooltip: 'Log out',
-            onPressed: _isSigningOut ? null : _signOut,
+            onPressed: onSignOut,
             icon: const Icon(Icons.logout),
           ),
         ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 12),
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Signed in as ${widget.email}',
-                    style: TextStyle(color: colors.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 28),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: colors.primary,
-                      borderRadius: BorderRadius.circular(20),
+      body: AnimatedBuilder(
+        animation: appData,
+        builder: (context, _) {
+          return ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              Text(
+                'Your campus food, made easy.',
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Signed in as $email',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.fastfood,
+                      color: Colors.white,
+                      size: 30,
                     ),
+                    SizedBox(height: 12),
+                    Text(
+                      'Find your next meal',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 21,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 5),
+                    Text(
+                      'Browse food stalls and order your favorites.',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 26),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Available stalls',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  Text('${appData.stalls.length} stalls'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...appData.stalls.map(
+                (stall) => _StallCard(
+                  stall: stall,
+                  appData: appData,
+                  onTap: () => _openStall(context, stall),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StallCard extends StatelessWidget {
+  const _StallCard({
+    required this.stall,
+    required this.appData,
+    required this.onTap,
+  });
+
+  final FoodStall stall;
+  final AppData appData;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            FoodImage(
+              imageUrl: stall.imageUrl,
+              height: 155,
+            ),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.restaurant_menu,
-                          size: 32,
-                          color: colors.onPrimary,
-                        ),
-                        const SizedBox(height: 16),
                         Text(
-                          isRegular
-                              ? 'Find your next meal'
-                              : isFoodStall
-                              ? 'Your stall'
-                              : 'Food to Go overview',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(
-                                color: colors.onPrimary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          isRegular
-                              ? 'Browse food stalls currently available on campus.'
-                              : isFoodStall
-                              ? 'Your menu and incoming orders will be available here.'
-                              : 'Platform management tools will be available here.',
-                          style: TextStyle(
-                            color: colors.onPrimary.withValues(alpha: 0.9),
+                          stall.name,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
+                        const SizedBox(height: 4),
+                        Text(stall.description),
+                        const SizedBox(height: 5),
+                        Text('${stall.menu.length} menu items'),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  if (isRegular) ...[
-                    Text(
-                      'Available stalls',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                  Column(
+                    children: [
+                      IconButton(
+                        tooltip: 'Like storefront',
+                        onPressed: () => appData.likeStall(stall.id),
+                        icon: const Icon(Icons.thumb_up_alt_outlined),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      color: colors.surface,
-                      child: const ListTile(
-                        leading: Icon(Icons.storefront_outlined),
-                        title: Text('No stalls available yet'),
-                        subtitle: Text(
-                          'Available food stalls will appear here.',
-                        ),
-                      ),
-                    ),
-                  ] else ...[
-                    Text(
-                      isFoodStall ? 'Incoming orders' : 'Management',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      color: colors.surface,
-                      child: ListTile(
-                        leading: const Icon(Icons.receipt_long_outlined),
-                        title: Text(
-                          isFoodStall
-                              ? 'No incoming orders'
-                              : 'No management tools yet',
-                        ),
-                        subtitle: Text(
-                          isFoodStall
-                              ? 'New customer orders will show up here.'
-                              : 'Admin tools will be added here.',
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (_isSigningOut) ...[
-                    const SizedBox(height: 20),
-                    const Center(child: CircularProgressIndicator()),
-                  ],
+                      Text('${appData.likesFor(stall.id)}'),
+                    ],
+                  ),
+                  const Icon(Icons.chevron_right),
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OwnerDashboard extends StatelessWidget {
+  const _OwnerDashboard({
+    required this.email,
+    required this.stall,
+    required this.appData,
+    required this.onSignOut,
+  });
+
+  final String email;
+  final FoodStall stall;
+  final AppData appData;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Food Stall Dashboard'),
+        actions: [
+          IconButton(
+            tooltip: 'Log out',
+            onPressed: onSignOut,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: AnimatedBuilder(
+        animation: appData,
+        builder: (context, _) {
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Text(
+                'Welcome back',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              Text(email),
+              const SizedBox(height: 22),
+              FoodImage(
+                imageUrl: stall.imageUrl,
+                height: 170,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                stall.name,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              Text(stall.description),
+              const SizedBox(height: 18),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.restaurant_menu),
+                  title: const Text('Menu items'),
+                  subtitle: Text('${stall.menu.length} items'),
+                ),
+              ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.thumb_up_alt_outlined),
+                  title: const Text('Storefront likes'),
+                  subtitle: Text('${appData.likesFor(stall.id)} likes'),
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OwnerMenuScreen(
+                        stallId: stall.id,
+                        appData: appData,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.edit_note),
+                label: const Text('Manage Menu'),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'You can only manage the storefront assigned to your account.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PendingApprovalScreen extends StatelessWidget {
+  const _PendingApprovalScreen({
+    required this.email,
+    required this.onSignOut,
+    this.message =
+        'Your Food Stall account is waiting for administrator approval and storefront assignment.',
+  });
+
+  final String email;
+  final String message;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Food to Go'),
+        actions: [
+          IconButton(
+            onPressed: onSignOut,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.hourglass_top_rounded,
+                size: 65,
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Account Pending',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              Text(message, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              Text(
+                email,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: onSignOut,
+                icon: const Icon(Icons.logout),
+                label: const Text('Log Out'),
+              ),
+            ],
           ),
         ),
       ),

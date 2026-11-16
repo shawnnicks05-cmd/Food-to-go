@@ -1,22 +1,43 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 enum AccountType {
-  regular('Regular', 'regular'),
-  foodStall('Food stall', 'foodstall'),
-  admin('Admin', 'admin');
+  regular,
+  foodStall,
+  admin,
+  pending,
+}
 
-  const AccountType(this.label, this.metadataValue);
-
-  final String label;
-  final String metadataValue;
+extension AccountTypeInfo on AccountType {
+  String get label {
+    switch (this) {
+      case AccountType.regular:
+        return 'Regular';
+      case AccountType.foodStall:
+        return 'Food Stall';
+      case AccountType.admin:
+        return 'Admin';
+      case AccountType.pending:
+        return 'Pending Approval';
+    }
+  }
 
   static AccountType fromUser(User user) {
-    if (user.appMetadata['account_type'] == 'admin') {
-      return AccountType.admin;
+    final role = user.appMetadata['account_type'];
+
+    if (role == 'admin') return AccountType.admin;
+    if (role == 'foodstall') return AccountType.foodStall;
+    if (role == 'regular') return AccountType.regular;
+
+    // This is only a registration request, not an approved role.
+    if (user.userMetadata?['requested_account_type'] == 'foodstall') {
+      return AccountType.pending;
     }
-    if (user.userMetadata?['account_type'] == 'foodstall') {
-      return AccountType.foodStall;
-    }
+
     return AccountType.regular;
   }
+}
+
+String? assignedStorefrontId(User user) {
+  final value = user.appMetadata['storefront_id'];
+  return value is String && value.isNotEmpty ? value : null;
 }

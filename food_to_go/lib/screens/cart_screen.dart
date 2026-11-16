@@ -1,26 +1,52 @@
 import 'package:flutter/material.dart';
 
-import '../services/cart_service.dart';
+import '../services/app_data.dart';
 import '../widgets/food_image.dart';
+import 'checkout_screen.dart';
 
 class CartScreen extends StatelessWidget {
-  final CartService cart;
-
   const CartScreen({
     super.key,
-    required this.cart,
+    required this.appData,
   });
+
+  final AppData appData;
+
+  void _checkout(BuildContext context) {
+    if (appData.cart.items.isEmpty) return;
+
+    final unavailable = appData.cart.items.any(
+      (item) => !item.food.isAvailable,
+    );
+
+    if (unavailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Remove unavailable items before checking out.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CheckoutScreen(appData: appData),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Cart'),
-      ),
-
+      appBar: AppBar(title: const Text('My Cart')),
       body: AnimatedBuilder(
-        animation: cart,
-        builder: (context, child) {
+        animation: appData,
+        builder: (context, _) {
+          final cart = appData.cart;
+
           if (cart.items.isEmpty) {
             return const Center(
               child: Column(
@@ -32,10 +58,7 @@ class CartScreen extends StatelessWidget {
                     color: Colors.grey,
                   ),
                   SizedBox(height: 12),
-                  Text(
-                    'Your cart is empty.',
-                    style: TextStyle(fontSize: 16),
-                  ),
+                  Text('Your cart is empty.'),
                 ],
               ),
             );
@@ -51,9 +74,7 @@ class CartScreen extends StatelessWidget {
                     final item = cart.items[index];
 
                     return Card(
-                      margin: const EdgeInsets.only(
-                        bottom: 12,
-                      ),
+                      margin: const EdgeInsets.only(bottom: 12),
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Column(
@@ -62,12 +83,10 @@ class CartScreen extends StatelessWidget {
                               children: [
                                 FoodImage(
                                   imageUrl: item.food.imageUrl,
-                                  height: 85,
-                                  width: 85,
+                                  height: 80,
+                                  width: 80,
                                 ),
-
                                 const SizedBox(width: 12),
-
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -76,30 +95,24 @@ class CartScreen extends StatelessWidget {
                                       Text(
                                         item.food.name,
                                         style: const TextStyle(
-                                          fontWeight:
-                                              FontWeight.bold,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
-
-                                      Text(
-                                        item.purchaseLabel,
-                                        style: TextStyle(
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-
+                                      Text(item.purchaseLabel),
                                       Text(
                                         '₱${item.unitPrice.toStringAsFixed(2)} each',
                                       ),
+                                      if (!item.food.isAvailable)
+                                        const Text(
+                                          'Currently unavailable',
+                                          style: TextStyle(color: Colors.red),
+                                        ),
                                     ],
                                   ),
                                 ),
-
                                 IconButton(
                                   tooltip: 'Remove item',
-                                  onPressed: () {
-                                    cart.removeItem(index);
-                                  },
+                                  onPressed: () => cart.removeItem(index),
                                   icon: const Icon(
                                     Icons.delete_outline,
                                     color: Colors.red,
@@ -107,48 +120,38 @@ class CartScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
-
                             const Divider(),
-
                             Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Row(
                                   children: [
                                     IconButton(
-                                      onPressed: () {
-                                        cart.updateQuantity(
-                                          index,
-                                          item.quantity - 1,
-                                        );
-                                      },
+                                      onPressed: () => cart.updateQuantity(
+                                        index,
+                                        item.quantity - 1,
+                                      ),
                                       icon: const Icon(
                                         Icons.remove_circle_outline,
                                       ),
                                     ),
-
                                     Text(
                                       '${item.quantity}',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
-
                                     IconButton(
-                                      onPressed: () {
-                                        cart.updateQuantity(
-                                          index,
-                                          item.quantity + 1,
-                                        );
-                                      },
+                                      onPressed: () => cart.updateQuantity(
+                                        index,
+                                        item.quantity + 1,
+                                      ),
                                       icon: const Icon(
                                         Icons.add_circle_outline,
                                       ),
                                     ),
                                   ],
                                 ),
-
                                 Text(
                                   '₱${item.subtotal.toStringAsFixed(2)}',
                                   style: const TextStyle(
@@ -164,39 +167,14 @@ class CartScreen extends StatelessWidget {
                   },
                 ),
               ),
-
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surface,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, -3),
-                    ),
-                  ],
-                ),
-                child: SafeArea(
-                  top: false,
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
                       Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Total Items'),
-                          Text('${cart.totalItems}'),
-                        ],
-                      ),
-
-                      const SizedBox(height: 10),
-
-                      Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
                             'Total Amount',
@@ -205,7 +183,6 @@ class CartScreen extends StatelessWidget {
                               fontSize: 18,
                             ),
                           ),
-
                           Text(
                             '₱${cart.totalPrice.toStringAsFixed(2)}',
                             style: const TextStyle(
@@ -215,22 +192,11 @@ class CartScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-
-                      const SizedBox(height: 16),
-
+                      const SizedBox(height: 14),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Checkout functionality will be added next.',
-                                ),
-                              ),
-                            );
-                          },
+                          onPressed: () => _checkout(context),
                           child: const Text('Proceed to Checkout'),
                         ),
                       ),

@@ -16,19 +16,15 @@ class CartItem {
     required this.quantity,
   });
 
-  double get unitPrice {
-    return purchaseType == PurchaseType.meal
-        ? food.mealPrice
-        : food.soloPrice;
-  }
+  double get unitPrice =>
+      purchaseType == PurchaseType.meal
+          ? food.mealPrice
+          : food.soloPrice;
 
   double get subtotal => unitPrice * quantity;
 
-  String get purchaseLabel {
-    return purchaseType == PurchaseType.meal
-        ? 'Meal'
-        : 'Solo';
-  }
+  String get purchaseLabel =>
+      purchaseType == PurchaseType.meal ? 'Meal' : 'Solo';
 
   CartItem copyWith({
     int? quantity,

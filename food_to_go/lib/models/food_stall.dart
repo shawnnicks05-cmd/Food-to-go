@@ -2,12 +2,12 @@ import 'food_item.dart';
 
 class FoodStall {
   final String id;
-  final String name;
-  final String description;
-  final String imageUrl;
+  String name;
+  String description;
+  String imageUrl;
   final List<FoodItem> menu;
 
-  const FoodStall({
+  FoodStall({
     required this.id,
     required this.name,
     required this.description,

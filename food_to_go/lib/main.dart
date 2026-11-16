@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:food_to_go/auth_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'auth_screen.dart';
+import 'services/app_data.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -9,27 +11,49 @@ Future<void> main() async {
     'SUPABASE_URL',
     defaultValue: 'https://csofjnidriuxxhrwzszn.supabase.co',
   );
+
   const supabasePublishableKey = String.fromEnvironment(
     'SUPABASE_PUBLISHABLE_KEY',
     defaultValue: 'sb_publishable_mgKw3tvEdOds8sLxxFat5Q_n8qIXvbD',
   );
-  final supabaseConfigured =
-      supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
 
-  if (supabaseConfigured) {
+  final configured =
+      supabaseUrl.isNotEmpty &&
+      supabasePublishableKey.isNotEmpty &&
+      supabasePublishableKey != 'YOUR_SUPABASE_PUBLISHABLE_KEY';
+
+  if (configured) {
     await Supabase.initialize(
       url: supabaseUrl,
       publishableKey: supabasePublishableKey,
     );
   }
 
-  runApp(FoodToGoApp(supabaseConfigured: supabaseConfigured));
+  runApp(
+    FoodToGoApp(supabaseConfigured: configured),
+  );
 }
 
-class FoodToGoApp extends StatelessWidget {
-  const FoodToGoApp({super.key, required this.supabaseConfigured});
+class FoodToGoApp extends StatefulWidget {
+  const FoodToGoApp({
+    super.key,
+    required this.supabaseConfigured,
+  });
 
   final bool supabaseConfigured;
+
+  @override
+  State<FoodToGoApp> createState() => _FoodToGoAppState();
+}
+
+class _FoodToGoAppState extends State<FoodToGoApp> {
+  late final AppData appData = AppData();
+
+  @override
+  void dispose() {
+    appData.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,18 +61,21 @@ class FoodToGoApp extends StatelessWidget {
     const cream = Color(0xFFF7F3ED);
     const warmWhite = Color(0xFFFFFCF7);
     const ink = Color(0xFF302F27);
-    final colorScheme = ColorScheme.fromSeed(seedColor: sage, surface: cream)
-        .copyWith(
-          primary: sage,
-          onPrimary: Colors.white,
-          primaryContainer: const Color(0xFFE3E8D9),
-          onPrimaryContainer: const Color(0xFF303927),
-          secondary: const Color(0xFFE8DFD3),
-          onSecondary: ink,
-          surface: cream,
-          onSurface: ink,
-          outline: const Color(0xFF888477),
-        );
+
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: sage,
+      surface: cream,
+    ).copyWith(
+      primary: sage,
+      onPrimary: Colors.white,
+      primaryContainer: const Color(0xFFE3E8D9),
+      onPrimaryContainer: const Color(0xFF303927),
+      secondary: const Color(0xFFE8DFD3),
+      onSecondary: ink,
+      surface: cream,
+      onSurface: ink,
+      outline: const Color(0xFF888477),
+    );
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -66,15 +93,6 @@ class FoodToGoApp extends StatelessWidget {
           fillColor: warmWhite,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFD8D0C4)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFD8D0C4)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: sage, width: 2),
           ),
         ),
         filledButtonTheme: FilledButtonThemeData(
@@ -88,7 +106,10 @@ class FoodToGoApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: AuthScreen(supabaseConfigured: supabaseConfigured),
+      home: AuthScreen(
+        supabaseConfigured: widget.supabaseConfigured,
+        appData: appData,
+      ),
     );
   }
 }
