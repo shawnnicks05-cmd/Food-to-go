@@ -10,6 +10,7 @@ import 'cart_service.dart';
 
 class AppData extends ChangeNotifier {
   static const _foodImagesBucket = 'food-images';
+  static const _profileImagesBucket = 'profile-images';
 
   AppData({SupabaseClient? client}) : this._(client, []);
 
@@ -256,6 +257,97 @@ class AppData extends ChangeNotifier {
     }
 
     final extension = fileName.split('.').last.toLowerCase();
+    final contentType = _imageContentType(fileName, bytes);
+
+    final path = '$stallId/${DateTime.now().microsecondsSinceEpoch}.$extension';
+    await client.storage
+        .from(_foodImagesBucket)
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: contentType),
+        );
+    return client.storage.from(_foodImagesBucket).getPublicUrl(path);
+  }
+
+  Future<String> uploadProfileImage({
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    final client = _requireClient();
+    final userId = _requireUser();
+    final extension = fileName.split('.').last.toLowerCase();
+    final contentType = _imageContentType(fileName, bytes);
+    final path = '$userId/${DateTime.now().microsecondsSinceEpoch}.$extension';
+
+    await client.storage
+        .from(_profileImagesBucket)
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: contentType),
+        );
+    return client.storage.from(_profileImagesBucket).getPublicUrl(path);
+  }
+
+  Future<void> updatePersonalProfile({
+    required String fullName,
+    required String phone,
+    required String? avatarUrl,
+  }) async {
+    final client = _requireClient();
+    final user = client.auth.currentUser;
+    if (user == null) throw StateError('Sign in before updating your profile.');
+
+    final metadata = Map<String, dynamic>.from(user.userMetadata ?? const {});
+    metadata['full_name'] = fullName.trim();
+    metadata['phone'] = phone.trim();
+    if (avatarUrl == null) {
+      metadata.remove('avatar_url');
+    } else {
+      metadata['avatar_url'] = avatarUrl;
+    }
+
+    await client.auth.updateUser(UserAttributes(data: metadata));
+  }
+
+  Future<void> updateStallProfile({
+    required String stallId,
+    required String name,
+    required String description,
+    required String contactPhone,
+    required String contactEmail,
+  }) async {
+    final client = _requireClient();
+    final stall = getStall(stallId);
+    if (stall == null) throw StateError('Food stall "$stallId" was not found.');
+
+    final row = await client
+        .from('food_stalls')
+        .update({
+          'name': name.trim(),
+          'description': description.trim(),
+          'contact_phone': contactPhone.trim(),
+          'contact_email': contactEmail.trim(),
+        })
+        .eq('id', stallId)
+        .select()
+        .maybeSingle();
+    if (row == null) {
+      throw StateError('The assigned storefront could not be updated.');
+    }
+
+    final updatedStall = FoodStall.fromMap(row, menu: stall.menu);
+    stall
+      ..name = updatedStall.name
+      ..description = updatedStall.description
+      ..contactPhone = updatedStall.contactPhone
+      ..contactEmail = updatedStall.contactEmail;
+    notifyListeners();
+  }
+
+  String _imageContentType(String fileName, Uint8List bytes) {
+    final extension = fileName.split('.').last.toLowerCase();
     const contentTypes = {
       'jpg': 'image/jpeg',
       'jpeg': 'image/jpeg',
@@ -272,16 +364,7 @@ class AppData extends ChangeNotifier {
         'Image files must be between 1 byte and 5 MB.',
       );
     }
-
-    final path = '$stallId/${DateTime.now().microsecondsSinceEpoch}.$extension';
-    await client.storage
-        .from(_foodImagesBucket)
-        .uploadBinary(
-          path,
-          bytes,
-          fileOptions: FileOptions(contentType: contentType),
-        );
-    return client.storage.from(_foodImagesBucket).getPublicUrl(path);
+    return contentType;
   }
 
   Future<void> updateFood(String stallId, FoodItem updatedFood) async {

@@ -8,6 +8,7 @@ import 'screens/cart_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/favorites_screens.dart';
 import 'screens/owner_menu_screen.dart';
+import 'screens/profile_screen.dart';
 import 'screens/stall_menu_screen.dart';
 import 'widgets/food_image.dart';
 
@@ -18,12 +19,14 @@ class HomeScreen extends StatelessWidget {
     required this.accountType,
     required this.storefrontId,
     required this.appData,
+    this.profileMetadata = const {},
   });
 
   final String email;
   final AccountType accountType;
   final String? storefrontId;
   final AppData appData;
+  final Map<String, dynamic> profileMetadata;
 
   Future<void> _signOut(BuildContext context) async {
     try {
@@ -109,6 +112,7 @@ class HomeScreen extends StatelessWidget {
         email: email,
         stall: stall,
         appData: appData,
+        profileMetadata: profileMetadata,
         onSignOut: () => _signOut(context),
       );
     }
@@ -123,6 +127,7 @@ class HomeScreen extends StatelessWidget {
     return _CustomerHome(
       email: email,
       appData: appData,
+      profileMetadata: profileMetadata,
       onSignOut: () => _signOut(context),
       onOpenCart: () => _openCart(context),
     );
@@ -133,12 +138,14 @@ class _CustomerHome extends StatelessWidget {
   const _CustomerHome({
     required this.email,
     required this.appData,
+    required this.profileMetadata,
     required this.onSignOut,
     required this.onOpenCart,
   });
 
   final String email;
   final AppData appData;
+  final Map<String, dynamic> profileMetadata;
   final VoidCallback onSignOut;
   final VoidCallback onOpenCart;
 
@@ -147,6 +154,19 @@ class _CustomerHome extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (_) => StallMenuScreen(stallId: stall.id, appData: appData),
+      ),
+    );
+  }
+
+  void _openProfile(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(
+          email: email,
+          profileMetadata: profileMetadata,
+          appData: appData,
+        ),
       ),
     );
   }
@@ -183,6 +203,11 @@ class _CustomerHome extends StatelessWidget {
                 ),
               );
             },
+          ),
+          IconButton(
+            tooltip: 'My profile',
+            onPressed: () => _openProfile(context),
+            icon: const Icon(Icons.person_outline),
           ),
           IconButton(
             tooltip: 'Log out',
@@ -355,13 +380,29 @@ class _OwnerDashboard extends StatelessWidget {
     required this.email,
     required this.stall,
     required this.appData,
+    required this.profileMetadata,
     required this.onSignOut,
   });
 
   final String email;
   final FoodStall stall;
   final AppData appData;
+  final Map<String, dynamic> profileMetadata;
   final VoidCallback onSignOut;
+
+  void _openProfile(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(
+          email: email,
+          profileMetadata: profileMetadata,
+          appData: appData,
+          stall: stall,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -369,6 +410,11 @@ class _OwnerDashboard extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Food Stall Dashboard'),
         actions: [
+          IconButton(
+            tooltip: 'My profile',
+            onPressed: () => _openProfile(context),
+            icon: const Icon(Icons.person_outline),
+          ),
           IconButton(
             tooltip: 'Log out',
             onPressed: onSignOut,

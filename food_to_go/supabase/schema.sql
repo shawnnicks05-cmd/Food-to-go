@@ -3,9 +3,15 @@ create table if not exists public.food_stalls (
   name text not null,
   description text not null default '',
   image_url text not null default '',
+  contact_phone text not null default '',
+  contact_email text not null default '',
   like_count integer not null default 0 check (like_count >= 0),
   created_at timestamptz not null default now()
 );
+
+alter table public.food_stalls
+  add column if not exists contact_phone text not null default '',
+  add column if not exists contact_email text not null default '';
 
 create table if not exists public.food_items (
   id text primary key default gen_random_uuid()::text,
@@ -26,6 +32,21 @@ insert into storage.buckets (
 values (
   'food-images',
   'food-images',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+insert into storage.buckets (
+  id, name, public, file_size_limit, allowed_mime_types
+)
+values (
+  'profile-images',
+  'profile-images',
   true,
   5242880,
   array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
@@ -89,6 +110,19 @@ drop policy if exists "Authenticated users can read stalls"
 create policy "Authenticated users can read stalls"
   on public.food_stalls for select to authenticated
   using (true);
+
+drop policy if exists "Stall owners can update their storefront profile"
+  on public.food_stalls;
+create policy "Stall owners can update their storefront profile"
+  on public.food_stalls for update to authenticated
+  using (
+    id = (select auth.jwt() -> 'app_metadata' ->> 'storefront_id')
+    and (select auth.jwt() -> 'app_metadata' ->> 'account_type') = 'foodstall'
+  )
+  with check (
+    id = (select auth.jwt() -> 'app_metadata' ->> 'storefront_id')
+    and (select auth.jwt() -> 'app_metadata' ->> 'account_type') = 'foodstall'
+  );
 
 drop policy if exists "Authenticated users can read menu items"
   on public.food_items;
@@ -175,6 +209,8 @@ revoke all on public.food_stalls, public.food_items, public.favorites,
   from anon, authenticated;
 
 grant select on public.food_stalls, public.food_items to authenticated;
+grant update (name, description, contact_phone, contact_email)
+  on public.food_stalls to authenticated;
 grant select, insert, delete on public.favorites to authenticated;
 grant select, insert on public.stall_likes to authenticated;
 grant select on public.orders, public.order_items to authenticated;
@@ -429,6 +465,15 @@ create policy "Stall owners can upload food images"
     and (storage.foldername(name))[1] =
       (select auth.jwt() -> 'app_metadata' ->> 'storefront_id')
     and (select auth.jwt() -> 'app_metadata' ->> 'account_type') = 'foodstall'
+  );
+
+drop policy if exists "Users can upload their profile photos"
+  on storage.objects;
+create policy "Users can upload their profile photos"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'profile-images'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
   );
 
 notify pgrst, 'reload schema';

@@ -156,6 +156,7 @@ class _AuthScreenState extends State<AuthScreen> {
         accountType: AccountTypeInfo.fromUser(_user!),
         storefrontId: assignedStorefrontId(_user!),
         appData: widget.appData,
+        profileMetadata: _user!.userMetadata ?? const {},
       );
     }
 

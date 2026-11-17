@@ -69,12 +69,24 @@ void main() {
     expect(find.text('Find your next meal'), findsOneWidget);
     expect(find.text('Available stalls'), findsOneWidget);
     expect(find.byTooltip('Log out'), findsOneWidget);
+    expect(find.byTooltip('My profile'), findsOneWidget);
     expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('My profile'));
+    await tester.pumpAndSettle();
+    expect(find.text('My Profile'), findsOneWidget);
+    expect(find.text('Personal details'), findsOneWidget);
+    expect(find.text('Save personal profile'), findsOneWidget);
 
     appData.dispose();
   });
 
   testWidgets('food stall account gets its assigned dashboard', (tester) async {
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final appData = AppData.withStalls([
       FoodStall(
         id: 'waffle_time',
@@ -99,6 +111,15 @@ void main() {
     expect(find.text('Food Stall Dashboard'), findsOneWidget);
     expect(find.text('Waffle Time'), findsOneWidget);
     expect(find.text('Manage Menu'), findsOneWidget);
+    expect(find.byTooltip('My profile'), findsOneWidget);
+    await tester.tap(find.byTooltip('My profile'));
+    await tester.pumpAndSettle();
+    expect(find.text('My Profile'), findsOneWidget);
+    expect(find.text('Storefront details'), findsOneWidget);
+    expect(find.text('Save storefront details'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
     await tester.scrollUntilVisible(
       find.text('You can only manage the storefront assigned to your account.'),
       100,

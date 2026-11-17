@@ -1,8 +1,10 @@
 # Supabase data setup
 
 1. Open the Supabase project's SQL Editor and run `schema.sql`.
-   This creates `public.food_items` and the other tables as well as the
-   Storage bucket. If the app still reports a missing table after the script
+   This creates `public.food_items` and the other tables, adds editable
+   storefront contact fields, and creates the food and profile image buckets.
+   The script can be rerun to apply these additions to an existing project. If
+   the app still reports a missing table after the script
    completes, run `NOTIFY pgrst, 'reload schema';` in the SQL Editor and wait
    briefly for the API schema cache to refresh.
 2. Add at least one stall directly in Supabase Table Editor. Admins can then
@@ -62,3 +64,11 @@ under that stall's folder, then the returned public URL is saved in the menu
 row when the form is saved. Images must be JPG, PNG, WebP, or GIF and at most
 5 MB. Storage upload policies require the user's approved `app_metadata`
 storefront assignment.
+
+Regular users and approved Food Stall owners can open **My Profile** from
+their dashboard to edit their name, phone number, and profile photo. Profile
+details are saved in the signed-in user's Supabase Auth metadata. Food Stall
+owners can additionally edit their assigned storefront's name, description,
+business phone, and contact email; the storefront assignment itself remains
+administrator-managed. Profile photos are stored in the public `profile-images`
+bucket, with uploads restricted to each authenticated user's own folder.
