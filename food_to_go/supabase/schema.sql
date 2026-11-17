@@ -175,7 +175,7 @@ revoke all on public.food_stalls, public.food_items, public.favorites,
   from anon, authenticated;
 
 grant select on public.food_stalls, public.food_items to authenticated;
-grant insert, delete on public.favorites to authenticated;
+grant select, insert, delete on public.favorites to authenticated;
 grant select, insert on public.stall_likes to authenticated;
 grant select on public.orders, public.order_items to authenticated;
 grant insert (
@@ -346,6 +346,80 @@ revoke all on function public.increment_food_order_count() from public, anon,
 revoke all on function public.place_food_order(jsonb, text) from public, anon;
 grant execute on function public.place_food_order(jsonb, text) to authenticated;
 
+create or replace function public.list_pending_food_stall_accounts()
+returns table (user_id uuid, email text, created_at timestamptz)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null
+    or (auth.jwt() -> 'app_metadata' ->> 'account_type')
+      is distinct from 'admin' then
+    raise exception 'Administrator access is required.';
+  end if;
+
+  return query
+    select u.id, u.email::text, u.created_at
+    from auth.users as u
+    left join public.food_stalls as s
+      on s.id = u.raw_app_meta_data ->> 'storefront_id'
+    where u.raw_user_meta_data ->> 'requested_account_type' = 'foodstall'
+      and (
+        u.raw_app_meta_data ->> 'account_type' is distinct from 'foodstall'
+        or s.id is null
+      )
+    order by u.created_at;
+end;
+$$;
+
+create or replace function public.approve_food_stall_account(
+  p_user_id uuid,
+  p_stall_id text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null
+    or (auth.jwt() -> 'app_metadata' ->> 'account_type')
+      is distinct from 'admin' then
+    raise exception 'Administrator access is required.';
+  end if;
+
+  if not exists (
+    select 1 from public.food_stalls where id = p_stall_id
+  ) then
+    raise exception 'The selected storefront does not exist.';
+  end if;
+
+  update auth.users
+    set raw_app_meta_data =
+      coalesce(raw_app_meta_data, '{}'::jsonb) ||
+      jsonb_build_object(
+        'account_type', 'foodstall',
+        'storefront_id', p_stall_id
+      )
+    where id = p_user_id
+      and raw_user_meta_data ->> 'requested_account_type' = 'foodstall';
+
+  if not found then
+    raise exception 'The pending Food Stall account was not found.';
+  end if;
+end;
+$$;
+
+revoke all on function public.list_pending_food_stall_accounts()
+  from public, anon, authenticated;
+revoke all on function public.approve_food_stall_account(uuid, text)
+  from public, anon, authenticated;
+grant execute on function public.list_pending_food_stall_accounts()
+  to authenticated;
+grant execute on function public.approve_food_stall_account(uuid, text)
+  to authenticated;
+
 drop policy if exists "Stall owners can upload food images"
   on storage.objects;
 create policy "Stall owners can upload food images"
@@ -356,3 +430,5 @@ create policy "Stall owners can upload food images"
       (select auth.jwt() -> 'app_metadata' ->> 'storefront_id')
     and (select auth.jwt() -> 'app_metadata' ->> 'account_type') = 'foodstall'
   );
+
+notify pgrst, 'reload schema';

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -111,6 +112,7 @@ class _AuthScreenState extends State<AuthScreen> {
         final response = await auth.signUp(
           email: email,
           password: _passwordController.text,
+          emailRedirectTo: kIsWeb ? Uri.base.origin : null,
           data: {
             'requested_account_type': _selectedType == AccountType.foodStall
                 ? 'foodstall'

@@ -122,4 +122,26 @@ void main() {
 
     appData.dispose();
   });
+
+  testWidgets('admin account opens approval dashboard', (tester) async {
+    final appData = AppData.withStalls([]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          email: 'admin@example.com',
+          accountType: AccountType.admin,
+          storefrontId: null,
+          appData: appData,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Administrator Dashboard'), findsOneWidget);
+    expect(find.text('Food Stall approval requests'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    appData.dispose();
+  });
 }

@@ -5,6 +5,7 @@ import 'account_type.dart';
 import 'models/food_stall.dart';
 import 'services/app_data.dart';
 import 'screens/cart_screen.dart';
+import 'screens/admin_dashboard_screen.dart';
 import 'screens/favorites_screens.dart';
 import 'screens/owner_menu_screen.dart';
 import 'screens/stall_menu_screen.dart';
@@ -45,6 +46,13 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: appData,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     if (accountType == AccountType.pending ||
         (accountType == AccountType.foodStall && storefrontId == null)) {
       return _PendingApprovalScreen(
@@ -72,6 +80,11 @@ class HomeScreen extends StatelessWidget {
                 FilledButton(
                   onPressed: appData.retryLoad,
                   child: const Text('Try again'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _signOut(context),
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Sign out'),
                 ),
               ],
             ),
@@ -101,10 +114,8 @@ class HomeScreen extends StatelessWidget {
     }
 
     if (accountType == AccountType.admin) {
-      return _PendingApprovalScreen(
-        email: email,
-        message:
-            'Administrator account detected. The administration dashboard has not been implemented in this prototype.',
+      return AdminDashboardScreen(
+        appData: appData,
         onSignOut: () => _signOut(context),
       );
     }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -34,6 +36,8 @@ class AppData extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get loadError => _loadError;
 
+  static const _loadTimeout = Duration(seconds: 20);
+
   FoodStall? getStall(String id) {
     for (final stall in _stalls) {
       if (stall.id == id) return stall;
@@ -61,7 +65,9 @@ class AppData extends ChangeNotifier {
 
   Future<void> setUser(String? userId) async {
     if (_client == null) return;
-    if (_userId == userId && (userId == null || _hasLoaded)) return;
+    if (_userId == userId && (userId == null || _hasLoaded || _isLoading)) {
+      return;
+    }
 
     _userId = userId;
     _favoriteIds.clear();
@@ -78,19 +84,17 @@ class AppData extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final stallRows = await _client
-          .from('food_stalls')
-          .select()
-          .order('name');
-      final foodRows = await _client.from('food_items').select().order('name');
-      final favoriteRows = await _client
-          .from('favorites')
-          .select('food_item_id')
-          .eq('user_id', userId);
-      final likeRows = await _client
-          .from('stall_likes')
-          .select('stall_id')
-          .eq('user_id', userId);
+      final results = await Future.wait([
+        _client.from('food_stalls').select().order('name'),
+        _client.from('food_items').select().order('name'),
+        _client.from('favorites').select('food_item_id').eq('user_id', userId),
+        _client.from('stall_likes').select('stall_id').eq('user_id', userId),
+      ]).timeout(_loadTimeout);
+
+      final stallRows = results[0];
+      final foodRows = results[1];
+      final favoriteRows = results[2];
+      final likeRows = results[3];
 
       if (_userId != userId) return;
 
@@ -112,8 +116,32 @@ class AppData extends ChangeNotifier {
       );
       _likedStalls.addAll(likeRows.map((row) => row['stall_id'] as String));
       _hasLoaded = true;
+    } on TimeoutException {
+      if (_userId == userId) {
+        _loadError =
+            'Supabase did not respond within 20 seconds. Check your internet '
+            'connection, Supabase project status, and database policies, then retry.';
+      }
+    } on PostgrestException catch (error) {
+      if (_userId == userId && error.code == 'PGRST205') {
+        _loadError =
+            'A required Supabase table is missing from the API schema. Run '
+            'food_to_go/supabase/schema.sql in the Supabase SQL Editor. If the '
+            'table already exists, run: NOTIFY pgrst, \'reload schema\';';
+      } else if (_userId == userId) {
+        final message = error.message.toLowerCase();
+        _loadError =
+            message.contains('permission denied') &&
+                message.contains('favorites')
+            ? 'Supabase denied access to your favorites table. Run '
+                  'GRANT SELECT, INSERT, DELETE ON public.favorites TO authenticated; '
+                  'in the Supabase SQL Editor, then tap Try again.'
+            : 'Supabase data request failed: ${error.message}';
+      }
     } catch (error) {
-      if (_userId == userId) _loadError = error.toString();
+      if (_userId == userId) {
+        _loadError = 'Supabase data request failed: $error';
+      }
     } finally {
       if (_userId == userId) {
         _isLoading = false;
@@ -128,6 +156,39 @@ class AppData extends ChangeNotifier {
       _hasLoaded = false;
       await setUser(userId);
     }
+  }
+
+  Future<List<PendingStallAccount>> loadPendingStallAccounts() async {
+    final response = await _requireClient().rpc(
+      'list_pending_food_stall_accounts',
+    );
+    if (response is! List) {
+      throw const FormatException(
+        'Supabase returned an invalid pending-account list.',
+      );
+    }
+
+    return response.map((row) {
+      if (row is! Map || row['user_id'] is! String || row['email'] is! String) {
+        throw const FormatException(
+          'Supabase returned an incomplete pending account.',
+        );
+      }
+      return PendingStallAccount(
+        userId: row['user_id'] as String,
+        email: row['email'] as String,
+      );
+    }).toList();
+  }
+
+  Future<void> approveFoodStallAccount({
+    required String userId,
+    required String stallId,
+  }) async {
+    await _requireClient().rpc(
+      'approve_food_stall_account',
+      params: {'p_user_id': userId, 'p_stall_id': stallId},
+    );
   }
 
   Future<void> toggleFavorite(String foodId) async {
@@ -354,6 +415,13 @@ class AppData extends ChangeNotifier {
     cart.dispose();
     super.dispose();
   }
+}
+
+class PendingStallAccount {
+  const PendingStallAccount({required this.userId, required this.email});
+
+  final String userId;
+  final String email;
 }
 
 class PlacedOrder {
