@@ -16,13 +16,15 @@ class StallMenuScreen extends StatelessWidget {
   final String stallId;
   final AppData appData;
 
-  Future<void> _likeStall(BuildContext context, FoodStall stall) async {
+  Future<void> _toggleStallLike(BuildContext context, FoodStall stall) async {
     try {
-      await appData.likeStall(stall.id);
+      await appData.toggleStallLike(stall.id);
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to like this stall: $error')),
+          SnackBar(
+            content: Text('Unable to update your storefront like: $error'),
+          ),
         );
       }
     }
@@ -93,15 +95,15 @@ class StallMenuScreen extends StatelessWidget {
                   Text('${appData.likesFor(stall.id)} likes'),
                   const Spacer(),
                   TextButton.icon(
-                    onPressed: appData.hasLiked(stall.id)
+                    onPressed: appData.isUpdatingLike(stall.id)
                         ? null
-                        : () => _likeStall(context, stall),
+                        : () => _toggleStallLike(context, stall),
                     icon: Icon(
                       appData.hasLiked(stall.id)
                           ? Icons.thumb_up
                           : Icons.thumb_up_alt_outlined,
                     ),
-                    label: Text(appData.hasLiked(stall.id) ? 'Liked' : 'Like'),
+                    label: Text(appData.hasLiked(stall.id) ? 'Unlike' : 'Like'),
                   ),
                 ],
               ),

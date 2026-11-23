@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/app_data.dart';
+import 'orders_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key, required this.appData});
@@ -38,8 +39,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => _OrderConfirmationScreen(
-            total: order.total,
-            itemCount: order.itemCount,
+            order: order,
+            appData: widget.appData,
             paymentMethod: _paymentMethod,
           ),
         ),
@@ -140,13 +141,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
 class _OrderConfirmationScreen extends StatelessWidget {
   const _OrderConfirmationScreen({
-    required this.total,
-    required this.itemCount,
+    required this.order,
+    required this.appData,
     required this.paymentMethod,
   });
 
-  final double total;
-  final int itemCount;
+  final PlacedOrder order;
+  final AppData appData;
   final String paymentMethod;
 
   @override
@@ -177,10 +178,20 @@ class _OrderConfirmationScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 18),
-              Text('Items: $itemCount'),
+              Text('Order #${order.id.substring(0, 8)}'),
+              Text('Items: ${order.itemCount}'),
               Text('Payment: $paymentMethod'),
-              Text('Total: ₱${total.toStringAsFixed(2)}'),
+              Text('Total: ₱${order.total.toStringAsFixed(2)}'),
               const SizedBox(height: 24),
+              OutlinedButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => OrdersScreen(appData: appData),
+                  ),
+                ),
+                child: const Text('Track order'),
+              ),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(

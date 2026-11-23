@@ -36,6 +36,7 @@ class OwnerMenuScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) {
         var uploadingImage = false;
+        var saving = false;
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             Future<void> uploadImage() async {
@@ -123,6 +124,7 @@ class OwnerMenuScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: imageController,
+                          onChanged: (_) => setDialogState(() {}),
                           decoration: const InputDecoration(
                             labelText: 'Image URL',
                             hintText: 'https://example.com/food.jpg',
@@ -130,7 +132,9 @@ class OwnerMenuScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
-                          onPressed: uploadingImage ? null : uploadImage,
+                          onPressed: uploadingImage || saving
+                              ? null
+                              : uploadImage,
                           icon: uploadingImage
                               ? const SizedBox(
                                   width: 18,
@@ -146,7 +150,13 @@ class OwnerMenuScreen extends StatelessWidget {
                                 : 'Choose and upload image',
                           ),
                         ),
-                        if (imageController.text.isNotEmpty) ...[
+                        if (imageController.text.trim().isNotEmpty) ...[
+                          TextButton(
+                            onPressed: uploadingImage || saving
+                                ? null
+                                : () => setDialogState(imageController.clear),
+                            child: const Text('Remove image'),
+                          ),
                           const SizedBox(height: 8),
                           SizedBox(
                             height: 150,
@@ -188,13 +198,13 @@ class OwnerMenuScreen extends StatelessWidget {
               ),
               actions: [
                 TextButton(
-                  onPressed: uploadingImage
+                  onPressed: uploadingImage || saving
                       ? null
                       : () => Navigator.pop(dialogContext),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  onPressed: uploadingImage
+                  onPressed: uploadingImage || saving
                       ? null
                       : () async {
                           if (!formKey.currentState!.validate()) return;
@@ -210,6 +220,7 @@ class OwnerMenuScreen extends StatelessWidget {
                             orderCount: existing?.orderCount ?? 0,
                           );
 
+                          setDialogState(() => saving = true);
                           try {
                             if (existing == null) {
                               await appData.addFood(stallId, food);
@@ -225,6 +236,9 @@ class OwnerMenuScreen extends StatelessWidget {
                                   ),
                                 ),
                               );
+                            }
+                            if (dialogContext.mounted) {
+                              setDialogState(() => saving = false);
                             }
                             return;
                           }

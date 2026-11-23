@@ -1,7 +1,6 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/food_stall.dart';
 import '../services/app_data.dart';
@@ -38,6 +37,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Uint8List? _selectedAvatar;
   String? _selectedAvatarName;
   bool _removeAvatar = false;
+  bool _pickingAvatar = false;
   bool _savingPersonal = false;
   bool _savingStall = false;
 
@@ -80,6 +80,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickAvatar() async {
+    setState(() => _pickingAvatar = true);
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -101,6 +102,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     } catch (error) {
       if (mounted) _showMessage('Unable to select profile photo: $error');
+    } finally {
+      if (mounted) setState(() => _pickingAvatar = false);
     }
   }
 
@@ -161,9 +164,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  static final _phoneCharacters = RegExp(r'[0-9+() -]');
+  static final _phoneNumber = RegExp(r'^\+?[0-9() -]*[0-9][0-9() -]*$');
+
+  String? _validatePhone(String? value) {
+    final phone = value?.trim() ?? '';
+    return phone.isEmpty || _phoneNumber.hasMatch(phone)
+        ? null
+        : 'Enter a valid phone number.';
   }
 
   ImageProvider? get _avatarImage {
@@ -225,13 +238,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             spacing: 8,
                             children: [
                               TextButton.icon(
-                                onPressed: _savingPersonal ? null : _pickAvatar,
+                                onPressed: (_savingPersonal || _pickingAvatar)
+                                    ? null
+                                    : _pickAvatar,
                                 icon: const Icon(Icons.photo_camera_outlined),
                                 label: const Text('Change photo'),
                               ),
                               if (_avatarImage != null)
                                 TextButton(
-                                  onPressed: _savingPersonal
+                                  onPressed: (_savingPersonal || _pickingAvatar)
                                       ? null
                                       : () => setState(() {
                                           _selectedAvatar = null;
@@ -247,6 +262,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     TextFormField(
                       controller: _nameController,
+                      enabled: !_savingPersonal,
                       textCapitalization: TextCapitalization.words,
                       decoration: const InputDecoration(labelText: 'Full name'),
                       validator: (value) =>
@@ -266,14 +282,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _phoneController,
+                      enabled: !_savingPersonal,
                       keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(_phoneCharacters),
+                      ],
+                      validator: _validatePhone,
                       decoration: const InputDecoration(
                         labelText: 'Phone number',
                       ),
                     ),
                     const SizedBox(height: 18),
                     FilledButton(
-                      onPressed: _savingPersonal ? null : _savePersonalProfile,
+                      onPressed: (_savingPersonal || _pickingAvatar)
+                          ? null
+                          : _savePersonalProfile,
                       child: _savingPersonal
                           ? const SizedBox(
                               height: 20,
@@ -312,6 +335,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: _stallNameController,
+                        enabled: !_savingStall,
                         textCapitalization: TextCapitalization.words,
                         decoration: const InputDecoration(
                           labelText: 'Storefront name',
@@ -324,6 +348,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _stallDescriptionController,
+                        enabled: !_savingStall,
                         maxLines: 3,
                         decoration: const InputDecoration(
                           labelText: 'Description',
@@ -332,7 +357,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _stallPhoneController,
+                        enabled: !_savingStall,
                         keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(_phoneCharacters),
+                        ],
+                        validator: _validatePhone,
                         decoration: const InputDecoration(
                           labelText: 'Business phone',
                         ),
@@ -340,6 +370,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _stallEmailController,
+                        enabled: !_savingStall,
                         keyboardType: TextInputType.emailAddress,
                         decoration: const InputDecoration(
                           labelText: 'Business contact email',

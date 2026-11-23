@@ -50,13 +50,16 @@ class _AuthScreenState extends State<AuthScreen> {
     if (widget.supabaseConfigured) {
       final auth = Supabase.instance.client.auth;
       _user = auth.currentUser;
-      unawaited(widget.appData.setUser(_user?.id));
+      unawaited(_loadUserData(_user));
 
       _authSubscription = auth.onAuthStateChange.listen((state) {
         if (!mounted) return;
         final user = state.session?.user;
+        if (_user?.id != user?.id) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
         setState(() => _user = user);
-        unawaited(widget.appData.setUser(user?.id));
+        unawaited(_loadUserData(user));
       });
     }
   }
@@ -148,10 +151,35 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _loadUserData(User? user, {bool force = false}) {
+    return widget.appData.setUser(
+      user?.id,
+      storefrontId:
+          user != null &&
+              AccountTypeInfo.fromUser(user) == AccountType.foodStall
+          ? assignedStorefrontId(user)
+          : null,
+      force: force,
+    );
+  }
+
+  Future<void> _refreshApproval() async {
+    final response = await Supabase.instance.client.auth.refreshSession();
+    if (!mounted) return;
+    final user = response.session?.user;
+    if (user != null &&
+        user.id == _user?.id &&
+        AccountTypeInfo.fromUser(user) == AccountType.foodStall) {
+      await _loadUserData(user, force: !widget.appData.isLoading);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_user != null) {
       return HomeScreen(
+        key: ValueKey(_user!.id),
+        onRefreshApproval: _refreshApproval,
         email: _user!.email ?? '',
         accountType: AccountTypeInfo.fromUser(_user!),
         storefrontId: assignedStorefrontId(_user!),

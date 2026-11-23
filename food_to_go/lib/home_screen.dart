@@ -8,6 +8,7 @@ import 'screens/cart_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/favorites_screens.dart';
 import 'screens/owner_menu_screen.dart';
+import 'screens/orders_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/stall_menu_screen.dart';
 import 'widgets/food_image.dart';
@@ -20,11 +21,13 @@ class HomeScreen extends StatelessWidget {
     required this.storefrontId,
     required this.appData,
     this.profileMetadata = const {},
+    this.onRefreshApproval,
   });
 
   final String email;
   final AccountType accountType;
   final String? storefrontId;
+  final Future<void> Function()? onRefreshApproval;
   final AppData appData;
   final Map<String, dynamic> profileMetadata;
 
@@ -60,6 +63,7 @@ class HomeScreen extends StatelessWidget {
         (accountType == AccountType.foodStall && storefrontId == null)) {
       return _PendingApprovalScreen(
         email: email,
+        onRefreshApproval: onRefreshApproval,
         onSignOut: () => _signOut(context),
       );
     }
@@ -99,11 +103,12 @@ class HomeScreen extends StatelessWidget {
     if (accountType == AccountType.foodStall) {
       final stall = appData.getStall(storefrontId!);
 
-      if (stall == null) {
+      if (stall == null || !appData.canManageStorefront(stall.id)) {
         return _PendingApprovalScreen(
           email: email,
+          onRefreshApproval: onRefreshApproval,
           message:
-              'Your account does not have a valid storefront assignment. Please contact the administrator.',
+              'Ask the administrator to verify that your storefront is assigned only to your account.',
           onSignOut: () => _signOut(context),
         );
       }
@@ -175,7 +180,9 @@ class _CustomerHome extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: const Icon(Icons.restaurant_menu),
+        leading: MediaQuery.sizeOf(context).width < 400
+            ? null
+            : const Icon(Icons.restaurant_menu),
         title: const Text('Food to Go'),
         actions: [
           IconButton(
@@ -190,19 +197,14 @@ class _CustomerHome extends StatelessWidget {
             },
             icon: const Icon(Icons.favorite_border),
           ),
-          AnimatedBuilder(
-            animation: appData,
-            builder: (context, _) {
-              return IconButton(
-                tooltip: 'Cart',
-                onPressed: onOpenCart,
-                icon: Badge(
-                  isLabelVisible: appData.cart.totalItems > 0,
-                  label: Text('${appData.cart.totalItems}'),
-                  child: const Icon(Icons.shopping_cart_outlined),
-                ),
-              );
-            },
+          IconButton(
+            tooltip: 'Cart',
+            onPressed: onOpenCart,
+            icon: Badge(
+              isLabelVisible: appData.cart.totalItems > 0,
+              label: Text('${appData.cart.totalItems}'),
+              child: const Icon(Icons.shopping_cart_outlined),
+            ),
           ),
           IconButton(
             tooltip: 'My profile',
@@ -216,77 +218,88 @@ class _CustomerHome extends StatelessWidget {
           ),
         ],
       ),
-      body: AnimatedBuilder(
-        animation: appData,
-        builder: (context, _) {
-          return ListView(
-            padding: const EdgeInsets.all(18),
+      body: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          Text(
+            'Your campus food, made easy.',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Signed in as $email',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 22),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.fastfood, color: Colors.white, size: 30),
+                SizedBox(height: 12),
+                Text(
+                  'Find your next meal',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 21,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  'Browse food stalls and order your favorites.',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => OrdersScreen(appData: appData),
+                ),
+              ),
+              icon: const Icon(Icons.receipt_long_outlined),
+              label: const Text('My Orders'),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
-                'Your campus food, made easy.',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                'Available stalls',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Signed in as $email',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 22),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.fastfood, color: Colors.white, size: 30),
-                    SizedBox(height: 12),
-                    Text(
-                      'Find your next meal',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 21,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 5),
-                    Text(
-                      'Browse food stalls and order your favorites.',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 26),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Available stalls',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text('${appData.stalls.length} stalls'),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ...appData.stalls.map(
-                (stall) => _StallCard(
-                  stall: stall,
-                  appData: appData,
-                  onTap: () => _openStall(context, stall),
-                ),
-              ),
+              Text('${appData.stalls.length} stalls'),
             ],
-          );
-        },
+          ),
+          const SizedBox(height: 12),
+          ...appData.stalls.map(
+            (stall) => _StallCard(
+              stall: stall,
+              appData: appData,
+              onTap: () => _openStall(context, stall),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -303,13 +316,15 @@ class _StallCard extends StatelessWidget {
   final AppData appData;
   final VoidCallback onTap;
 
-  Future<void> _likeStall(BuildContext context) async {
+  Future<void> _toggleStallLike(BuildContext context) async {
     try {
-      await appData.likeStall(stall.id);
+      await appData.toggleStallLike(stall.id);
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to like this stall: $error')),
+          SnackBar(
+            content: Text('Unable to update your storefront like: $error'),
+          ),
         );
       }
     }
@@ -351,10 +366,12 @@ class _StallCard extends StatelessWidget {
                   Column(
                     children: [
                       IconButton(
-                        tooltip: 'Like storefront',
-                        onPressed: appData.hasLiked(stall.id)
+                        tooltip: appData.hasLiked(stall.id)
+                            ? 'Unlike storefront'
+                            : 'Like storefront',
+                        onPressed: appData.isUpdatingLike(stall.id)
                             ? null
-                            : () => _likeStall(context),
+                            : () => _toggleStallLike(context),
                         icon: Icon(
                           appData.hasLiked(stall.id)
                               ? Icons.thumb_up
@@ -422,83 +439,119 @@ class _OwnerDashboard extends StatelessWidget {
           ),
         ],
       ),
-      body: AnimatedBuilder(
-        animation: appData,
-        builder: (context, _) {
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Text(
-                'Welcome back',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Text(
+            'Welcome back',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Text(email),
+          const SizedBox(height: 22),
+          FoodImage(imageUrl: stall.imageUrl, height: 170),
+          const SizedBox(height: 16),
+          Text(
+            stall.name,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          Text(stall.description),
+          const SizedBox(height: 18),
+          Card(
+            child: ListTile(
+              leading: MediaQuery.sizeOf(context).width < 400
+                  ? null
+                  : const Icon(Icons.restaurant_menu),
+              title: const Text('Menu items'),
+              subtitle: Text('${stall.menu.length} items'),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.thumb_up_alt_outlined),
+              title: const Text('Storefront likes'),
+              subtitle: Text('${appData.likesFor(stall.id)} likes'),
+            ),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      OwnerMenuScreen(stallId: stall.id, appData: appData),
                 ),
+              );
+            },
+            icon: const Icon(Icons.edit_note),
+            label: const Text('Manage Menu'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    OrdersScreen(appData: appData, stallId: stall.id),
               ),
-              const SizedBox(height: 6),
-              Text(email),
-              const SizedBox(height: 22),
-              FoodImage(imageUrl: stall.imageUrl, height: 170),
-              const SizedBox(height: 16),
-              Text(
-                stall.name,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              Text(stall.description),
-              const SizedBox(height: 18),
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.restaurant_menu),
-                  title: const Text('Menu items'),
-                  subtitle: Text('${stall.menu.length} items'),
-                ),
-              ),
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.thumb_up_alt_outlined),
-                  title: const Text('Storefront likes'),
-                  subtitle: Text('${appData.likesFor(stall.id)} likes'),
-                ),
-              ),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          OwnerMenuScreen(stallId: stall.id, appData: appData),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.edit_note),
-                label: const Text('Manage Menu'),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'You can only manage the storefront assigned to your account.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          );
-        },
+            ),
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: const Text('Stall Orders'),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'You can only manage the storefront assigned to your account.',
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
 }
 
-class _PendingApprovalScreen extends StatelessWidget {
+class _PendingApprovalScreen extends StatefulWidget {
   const _PendingApprovalScreen({
     required this.email,
     required this.onSignOut,
+    this.onRefreshApproval,
     this.message =
         'Your Food Stall account is waiting for administrator approval and storefront assignment.',
   });
 
   final String email;
   final String message;
+  final Future<void> Function()? onRefreshApproval;
   final VoidCallback onSignOut;
+
+  @override
+  State<_PendingApprovalScreen> createState() => _PendingApprovalScreenState();
+}
+
+class _PendingApprovalScreenState extends State<_PendingApprovalScreen> {
+  bool _refreshing = false;
+  String? _refreshMessage;
+
+  Future<void> _refresh() async {
+    setState(() {
+      _refreshing = true;
+      _refreshMessage = null;
+    });
+    try {
+      await widget.onRefreshApproval!();
+      if (mounted) setState(() => _refreshMessage = 'Still awaiting approval.');
+    } catch (error) {
+      if (mounted) {
+        setState(() => _refreshMessage = 'Unable to check approval: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -506,11 +559,14 @@ class _PendingApprovalScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Food to Go'),
         actions: [
-          IconButton(onPressed: onSignOut, icon: const Icon(Icons.logout)),
+          IconButton(
+            onPressed: widget.onSignOut,
+            icon: const Icon(Icons.logout),
+          ),
         ],
       ),
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -524,17 +580,27 @@ class _PendingApprovalScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              Text(message, textAlign: TextAlign.center),
+              Text(widget.message, textAlign: TextAlign.center),
               const SizedBox(height: 12),
               Text(
-                email,
+                widget.email,
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 20),
+              if (widget.onRefreshApproval != null)
+                FilledButton.icon(
+                  onPressed: _refreshing ? null : _refresh,
+                  icon: const Icon(Icons.refresh),
+                  label: Text(
+                    _refreshing ? 'Checking approval…' : 'Check approval',
+                  ),
+                ),
+              if (_refreshMessage != null)
+                Text(_refreshMessage!, textAlign: TextAlign.center),
               OutlinedButton.icon(
-                onPressed: onSignOut,
+                onPressed: widget.onSignOut,
                 icon: const Icon(Icons.logout),
                 label: const Text('Log Out'),
               ),

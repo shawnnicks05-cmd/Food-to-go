@@ -8,7 +8,11 @@
    completes, run `NOTIFY pgrst, 'reload schema';` in the SQL Editor and wait
    briefly for the API schema cache to refresh.
 2. Add at least one stall directly in Supabase Table Editor. Admins can then
-   approve accounts and assign stalls in the app. Food Stall accounts can add
+   approve accounts and choose an unassigned storefront in the app. Each
+   storefront can have one owner account. If existing accounts share a
+   storefront, editing is blocked until an administrator reassigns the extra
+   accounts from the approval dashboard. Create additional storefronts as
+   needed. Food Stall accounts can add
    menu items from their dashboard.
 3. Configure the `allow_usjr_email` auth hook with
    `allow_usjr_email.sql` if the project uses that hook.

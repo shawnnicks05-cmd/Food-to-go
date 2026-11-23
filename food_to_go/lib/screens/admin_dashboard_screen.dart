@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/food_stall.dart';
 import '../services/app_data.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -19,6 +20,8 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   List<PendingStallAccount> _accounts = [];
   final Map<String, String?> _selectedStalls = {};
+  List<FoodStall> _availableStalls = [];
+  bool _approving = false;
   bool _loading = true;
   String? _error;
 
@@ -36,18 +39,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     try {
       final accounts = await widget.appData.loadPendingStallAccounts();
+      final availableIds = await widget.appData.loadAvailableStorefrontIds();
       if (!mounted) return;
       setState(() {
         _accounts = accounts;
+        _availableStalls = widget.appData.stalls
+            .where((stall) => availableIds.contains(stall.id))
+            .toList();
         _selectedStalls.removeWhere(
-          (userId, _) => !accounts.any((account) => account.userId == userId),
+          (userId, stallId) =>
+              !availableIds.contains(stallId) ||
+              !accounts.any((account) => account.userId == userId),
         );
-        for (final account in accounts) {
-          _selectedStalls.putIfAbsent(
-            account.userId,
-            () => widget.appData.stalls.firstOrNull?.id,
-          );
-        }
       });
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -59,24 +62,35 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _approve(PendingStallAccount account) async {
     final stallId = _selectedStalls[account.userId];
     if (stallId == null) {
-      setState(() => _error = 'Add a storefront before approving accounts.');
+      setState(
+        () => _error =
+            'Select an available storefront before approving the account.',
+      );
       return;
     }
 
+    setState(() {
+      _approving = true;
+      _error = null;
+    });
     try {
       await widget.appData.approveFoodStallAccount(
         userId: account.userId,
         stallId: stallId,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${account.email} was approved.')));
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('${account.email} was approved.')),
+        );
       await _loadAccounts();
     } catch (error) {
       if (mounted) {
         setState(() => _error = 'Unable to approve account: $error');
       }
+    } finally {
+      if (mounted) setState(() => _approving = false);
     }
   }
 
@@ -88,7 +102,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         actions: [
           IconButton(
             tooltip: 'Refresh pending accounts',
-            onPressed: _loading ? null : _loadAccounts,
+            onPressed: _loading || _approving ? null : _loadAccounts,
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
@@ -101,8 +115,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _loadAccounts,
+              onRefresh: () async {
+                if (!_approving) await _loadAccounts();
+              },
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 children: [
                   Text(
@@ -123,11 +140,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       padding: EdgeInsets.symmetric(vertical: 32),
                       child: Text('There are no pending Food Stall accounts.'),
                     ),
-                  if (widget.appData.stalls.isEmpty)
+                  if (_availableStalls.isEmpty)
                     const Padding(
                       padding: EdgeInsets.only(top: 12),
                       child: Text(
-                        'No storefronts found. Add at least one stall in '
+                        'No unassigned storefronts are available. Add a stall in '
                         'Supabase Table Editor before approving accounts.',
                       ),
                     ),
@@ -148,15 +165,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Assign storefront',
                               ),
-                              items: widget.appData.stalls
+                              isExpanded: true,
+                              items: _availableStalls
                                   .map(
                                     (stall) => DropdownMenuItem(
                                       value: stall.id,
-                                      child: Text(stall.name),
+                                      child: Text(
+                                        stall.name,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   )
                                   .toList(),
-                              onChanged: widget.appData.stalls.isEmpty
+                              onChanged: _approving || _availableStalls.isEmpty
                                   ? null
                                   : (stallId) {
                                       setState(
@@ -167,7 +188,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             ),
                             const SizedBox(height: 12),
                             FilledButton(
-                              onPressed: widget.appData.stalls.isEmpty
+                              onPressed:
+                                  _approving ||
+                                      _selectedStalls[account.userId] == null
                                   ? null
                                   : () => _approve(account),
                               child: const Text('Approve account'),

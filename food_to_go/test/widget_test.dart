@@ -48,6 +48,39 @@ void main() {
     );
   });
 
+  testWidgets('customer home and profile fit a narrow mobile viewport', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final appData = AppData.withStalls([]);
+    addTearDown(appData.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          email: 'student@usjr.edu.ph',
+          accountType: AccountType.regular,
+          storefrontId: null,
+          appData: appData,
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('My profile'));
+    await tester.pumpAndSettle();
+    final phone = find.widgetWithText(TextFormField, 'Phone number');
+    await tester.enterText(phone, '+63 call 912-345-6789');
+    expect(
+      tester.widget<TextFormField>(phone).controller!.text,
+      '+63  912-345-6789',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('customer home screen displays the signed-in account', (
     tester,
   ) async {

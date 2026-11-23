@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/cart_item.dart';
 import '../models/food_item.dart';
 import '../models/food_stall.dart';
+import '../models/pickup_order.dart';
 import 'cart_service.dart';
 
 class AppData extends ChangeNotifier {
@@ -27,7 +28,11 @@ class AppData extends ChangeNotifier {
   final Set<String> _favoriteIds = {};
   final Set<String> _likedStalls = {};
 
+  final Set<(String, String)> _pendingLikes = {};
+  int _loadGeneration = 0;
   String? _userId;
+  String? _storefrontId;
+  bool _canManageStorefront = false;
   String? _loadError;
   bool _isLoading = false;
   bool _hasLoaded = false;
@@ -36,6 +41,9 @@ class AppData extends ChangeNotifier {
   List<FoodStall> get availableStalls => stalls;
   bool get isLoading => _isLoading;
   String? get loadError => _loadError;
+
+  bool canManageStorefront(String stallId) =>
+      _client == null || (_storefrontId == stallId && _canManageStorefront);
 
   static const _loadTimeout = Duration(seconds: 20);
 
@@ -64,13 +72,29 @@ class AppData extends ChangeNotifier {
 
   int likesFor(String stallId) => getStall(stallId)?.likeCount ?? 0;
 
-  Future<void> setUser(String? userId) async {
+  Future<void> setUser(
+    String? userId, {
+    String? storefrontId,
+    bool force = false,
+  }) async {
     if (_client == null) return;
-    if (_userId == userId && (userId == null || _hasLoaded || _isLoading)) {
+    if (!force &&
+        _userId == userId &&
+        _storefrontId == storefrontId &&
+        (userId == null || _hasLoaded || _isLoading)) {
       return;
     }
 
+    final generation = ++_loadGeneration;
+    final accountChanged = _userId != userId;
     _userId = userId;
+    _storefrontId = storefrontId;
+    _canManageStorefront = false;
+    _hasLoaded = false;
+    if (accountChanged) {
+      _stalls.clear();
+      cart.clearCart();
+    }
     _favoriteIds.clear();
     _likedStalls.clear();
     _loadError = null;
@@ -85,19 +109,24 @@ class AppData extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final results = await Future.wait([
+      final results = await Future.wait<dynamic>([
         _client.from('food_stalls').select().order('name'),
         _client.from('food_items').select().order('name'),
         _client.from('favorites').select('food_item_id').eq('user_id', userId),
         _client.from('stall_likes').select('stall_id').eq('user_id', userId),
+        if (storefrontId != null)
+          _client.rpc<bool>(
+            'can_manage_storefront',
+            params: {'p_stall_id': storefrontId},
+          ),
       ]).timeout(_loadTimeout);
 
-      final stallRows = results[0];
-      final foodRows = results[1];
-      final favoriteRows = results[2];
-      final likeRows = results[3];
+      final stallRows = results[0] as List<Map<String, dynamic>>;
+      final foodRows = results[1] as List<Map<String, dynamic>>;
+      final favoriteRows = results[2] as List<Map<String, dynamic>>;
+      final likeRows = results[3] as List<Map<String, dynamic>>;
 
-      if (_userId != userId) return;
+      if (_loadGeneration != generation) return;
 
       final menuByStall = <String, List<FoodItem>>{};
       for (final row in foodRows) {
@@ -116,20 +145,21 @@ class AppData extends ChangeNotifier {
         favoriteRows.map((row) => row['food_item_id'] as String),
       );
       _likedStalls.addAll(likeRows.map((row) => row['stall_id'] as String));
+      _canManageStorefront = storefrontId != null && results[4] == true;
       _hasLoaded = true;
     } on TimeoutException {
-      if (_userId == userId) {
+      if (_loadGeneration == generation) {
         _loadError =
             'Supabase did not respond within 20 seconds. Check your internet '
             'connection, Supabase project status, and database policies, then retry.';
       }
     } on PostgrestException catch (error) {
-      if (_userId == userId && error.code == 'PGRST205') {
+      if (_loadGeneration == generation && error.code == 'PGRST205') {
         _loadError =
             'A required Supabase table is missing from the API schema. Run '
             'food_to_go/supabase/schema.sql in the Supabase SQL Editor. If the '
             'table already exists, run: NOTIFY pgrst, \'reload schema\';';
-      } else if (_userId == userId) {
+      } else if (_loadGeneration == generation) {
         final message = error.message.toLowerCase();
         _loadError =
             message.contains('permission denied') &&
@@ -140,11 +170,11 @@ class AppData extends ChangeNotifier {
             : 'Supabase data request failed: ${error.message}';
       }
     } catch (error) {
-      if (_userId == userId) {
+      if (_loadGeneration == generation) {
         _loadError = 'Supabase data request failed: $error';
       }
     } finally {
-      if (_userId == userId) {
+      if (_loadGeneration == generation) {
         _isLoading = false;
         notifyListeners();
       }
@@ -154,8 +184,7 @@ class AppData extends ChangeNotifier {
   Future<void> retryLoad() async {
     final userId = _userId;
     if (userId != null) {
-      _hasLoaded = false;
-      await setUser(userId);
+      await setUser(userId, storefrontId: _storefrontId, force: true);
     }
   }
 
@@ -180,6 +209,11 @@ class AppData extends ChangeNotifier {
         email: row['email'] as String,
       );
     }).toList();
+  }
+
+  Future<Set<String>> loadAvailableStorefrontIds() async {
+    final ids = await _requireClient().rpc('list_available_storefront_ids');
+    return (ids as List).cast<String>().toSet();
   }
 
   Future<void> approveFoodStallAccount({
@@ -213,21 +247,50 @@ class AppData extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> likeStall(String stallId) async {
+  bool isUpdatingLike(String stallId) {
+    final userId = _userId;
+    return userId != null && _pendingLikes.contains((userId, stallId));
+  }
+
+  Future<void> toggleStallLike(String stallId) async {
     final client = _requireClient();
     final userId = _requireUser();
     final stall = getStall(stallId);
     if (stall == null) throw StateError('Food stall "$stallId" was not found.');
-    if (_likedStalls.contains(stallId)) return;
-
-    await client.from('stall_likes').insert({
-      'user_id': userId,
-      'stall_id': stallId,
-    });
-
-    _likedStalls.add(stallId);
-    stall.likeCount++;
+    final operation = (userId, stallId);
+    if (!_pendingLikes.add(operation)) return;
+    final generation = _loadGeneration;
+    final wasLiked = hasLiked(stallId);
     notifyListeners();
+
+    try {
+      if (wasLiked) {
+        await client
+            .from('stall_likes')
+            .delete()
+            .eq('user_id', userId)
+            .eq('stall_id', stallId);
+      } else {
+        await client
+            .from('stall_likes')
+            .upsert(
+              {'user_id': userId, 'stall_id': stallId},
+              onConflict: 'user_id,stall_id',
+              ignoreDuplicates: true,
+            );
+      }
+      if (generation != _loadGeneration) return;
+      if (wasLiked) {
+        _likedStalls.remove(stallId);
+        if (stall.likeCount > 0) stall.likeCount--;
+      } else {
+        _likedStalls.add(stallId);
+        stall.likeCount++;
+      }
+    } finally {
+      _pendingLikes.remove(operation);
+      if (_userId == userId) notifyListeners();
+    }
   }
 
   Future<void> addFood(String stallId, FoodItem food) async {
@@ -299,16 +362,15 @@ class AppData extends ChangeNotifier {
     final user = client.auth.currentUser;
     if (user == null) throw StateError('Sign in before updating your profile.');
 
-    final metadata = Map<String, dynamic>.from(user.userMetadata ?? const {});
-    metadata['full_name'] = fullName.trim();
-    metadata['phone'] = phone.trim();
-    if (avatarUrl == null) {
-      metadata.remove('avatar_url');
-    } else {
-      metadata['avatar_url'] = avatarUrl;
-    }
-
-    await client.auth.updateUser(UserAttributes(data: metadata));
+    await client.auth.updateUser(
+      UserAttributes(
+        data: {
+          'full_name': fullName.trim(),
+          'phone': phone.trim(),
+          'avatar_url': avatarUrl,
+        },
+      ),
+    );
   }
 
   Future<void> updateStallProfile({
@@ -428,6 +490,29 @@ class AppData extends ChangeNotifier {
     final index = stall.menu.indexWhere((item) => item.id == foodId);
     stall.menu[index] = FoodItem.fromMap(row);
     notifyListeners();
+  }
+
+  Future<List<PickupOrder>> loadPickupOrders({String? stallId}) async {
+    final rows = await _requireClient()
+        .rpc<List<dynamic>>(
+          'list_pickup_orders',
+          params: {'p_stall_id': stallId},
+        )
+        .timeout(_loadTimeout);
+    return rows.cast<Map<String, dynamic>>().map(PickupOrder.fromMap).toList();
+  }
+
+  Future<void> advancePickupOrder(String stallId, PickupOrder order) async {
+    await _requireClient()
+        .rpc<void>(
+          'advance_pickup_order',
+          params: {
+            'p_order_id': order.id,
+            'p_stall_id': stallId,
+            'p_status': order.status,
+          },
+        )
+        .timeout(_loadTimeout);
   }
 
   Future<PlacedOrder> placeOrder({
